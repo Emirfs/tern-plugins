@@ -1,13 +1,14 @@
 --!strict
--- Bağımsız sütunlar: satır satır bölünmüş bir ızgarayı sütunlara çevirir.
+-- Bağımsız sütunlar: satır satır bölünmüş ızgaraları sütunlara çevirir.
 --
 -- Tern bölmeleri ikili ağaç olarak tutar. (A | B) / (C | D) düzeninde yatay
 -- ayraç iki sütunu birden keser: sağdakini yukarı çekince soldaki de gelir.
 -- Aynı dört pane (A / C) | (B / D) olarak dizilince her sütunun kendi yatay
--- ayracı olur. Eklenti, her satırda aynı sayıda pane olan bir ızgarayı
--- (en az 2×2) pane'leri taşıyarak sütunlara çevirir; programlar kapanmaz.
--- Bir pane açılınca ya da kapanınca o sekmeye kendiliğinden uygulanır
--- (kapatılabilir), palet komutuyla elle de çalıştırılır.
+-- ayracı olur. Eklenti, sekmenin ağacında her satırında aynı sayıda pane olan
+-- bir ızgara (en az 2×2) bulduğu her yerde, sekmenin bir parçası olsa bile,
+-- pane'leri taşıyarak onu sütunlara çevirir; programlar kapanmaz.
+-- Kendiliğinden: yüklenince açık sekmede, odak değişince, pane açılınca ya da
+-- kapanınca (kapatılabilir); palet komutuyla elle de çalışır.
 
 local AUTO_KEY = "auto"
 
@@ -21,14 +22,14 @@ local function chain(t: TabTree, dir: string, out: { TabTree })
 	end
 end
 
--- Kök satırlara (`down`) bölünmüşse ve her satır aynı sayıda (≥2) yan yana
+-- Düğüm satırlara (`down`) bölünmüşse ve her satır aynı sayıda (≥2) yan yana
 -- pane'den oluşuyorsa pane id'lerini satır satır döndürür; değilse nil.
-local function rows_grid(root: TabTree): { { number } }?
-	if root.pane ~= nil or root.split ~= "down" then
+local function rows_grid(node: TabTree): { { number } }?
+	if node.pane ~= nil or node.split ~= "down" then
 		return nil
 	end
 	local rows: { TabTree } = {}
-	chain(root, "down", rows)
+	chain(node, "down", rows)
 	if #rows < 2 then
 		return nil
 	end
@@ -54,26 +55,48 @@ local function rows_grid(root: TabTree): { { number } }?
 	return grid
 end
 
--- Sekmedeki satır ızgarasını sütunlara çevirir. Bir taşıma başarısız olursa
--- düzen eski haline döner. Çevrildiyse true.
+-- Ağaçtaki bütün satır ızgaraları; bir ızgaranın içine inilmez.
+local function find_grids(node: TabTree, out: { { { number } } })
+	if node.pane ~= nil then
+		return
+	end
+	local grid = rows_grid(node)
+	if grid then
+		table.insert(out, grid)
+		return
+	end
+	if node[1] then
+		find_grids(node[1], out)
+	end
+	if node[2] then
+		find_grids(node[2], out)
+	end
+end
+
+-- Sekmedeki satır ızgaralarını sütunlara çevirir. Bir taşıma başarısız olursa
+-- düzen eski haline döner. Bir şey çevrildiyse true.
 local function to_columns(cx: WindowCx, tab: number): (boolean, string?)
 	local layout = cx.session:layout(tab)
 	if layout == nil or layout.zoomed then
 		return false, nil
 	end
-	local grid = rows_grid(layout.root)
-	if grid == nil then
+	local grids: { { { number } } } = {}
+	find_grids(layout.root, grids)
+	if #grids == 0 then
 		return false, nil
 	end
 	local snap = cx.layout:snapshot()
 	local keep = { focus = false }
 	-- Her satırın pane'ini bir üst satırdaki pane'in altına taşı: satır boşalınca
-	-- kapanır, her sütun kendi `down` zincirine dönüşür.
-	for i = 2, #grid do
-		for j, pane in grid[i] do
-			if not cx.layout:move(pane, grid[i - 1][j], "down", keep) then
-				cx.layout:restore(snap)
-				return false, "pane taşınamadı"
+	-- kapanır, her sütun kendi `down` zincirine dönüşür. Taşımalar ızgaranın
+	-- kendi yaprakları arasında kaldığı için diğer ızgaraların id'leri geçerli kalır.
+	for _, grid in grids do
+		for i = 2, #grid do
+			for j, pane in grid[i] do
+				if not cx.layout:move(pane, grid[i - 1][j], "down", keep) then
+					cx.layout:restore(snap)
+					return false, "pane taşınamadı"
+				end
 			end
 		end
 	end
@@ -114,6 +137,20 @@ tern.on("pane_closed", function(_ev, cx)
 	local tab = current_tab(cx)
 	if tab then
 		to_columns(cx, tab)
+	end
+end)
+-- Eklentiden önce kurulmuş düzenler: geçilen sekmede ve yüklenince açık sekmede.
+tern.on("focus", function(ev, cx)
+	if auto_enabled() then
+		to_columns(cx, ev.tab)
+	end
+end)
+tern.timer(0, function(cx)
+	if cx and auto_enabled() then
+		local tab = current_tab(cx)
+		if tab then
+			to_columns(cx, tab)
+		end
 	end
 end)
 

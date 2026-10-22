@@ -17,16 +17,16 @@ Before                     After
                            └──────┴──────┘
 ```
 
-The plugin turns any tab that is a grid of rows (at least 2 rows, every row with the same number of panes,
-at least 2) into the same panes in columns by moving them; programs keep running. The columns then share
-the vertical dividers, as a tiling layout must.
+The plugin finds every grid of rows in a tab (at least 2 rows, every row with the same number of panes, at
+least 2), also when it is only part of the tab, for example the right half beside a full-height pane, and
+turns it into the same panes in columns by moving them; programs keep running. The columns then share the
+vertical dividers, as a tiling layout must.
 
 ## Usage
 
-- Automatic: after you split or close a pane in this window, a tab that has become a grid of rows is turned
-  into columns.
-- Command palette: **Izgarayı sütunlara ayır** does it for the current tab, for example for a layout that
-  existed before the plugin.
+- Automatic: when the plugin loads (for the tab on screen), when you switch to a pane or tab, and after you
+  split or close a pane in this window.
+- Command palette: **Izgarayı sütunlara ayır** does it for the current tab.
 - **Bağımsız sütunlar: otomatik çevirmeyi aç/kapat** turns the automatic conversion off or on (saved).
 
 If a move fails half way, the tab's layout is restored. Zoomed tabs are left alone.
@@ -37,5 +37,4 @@ If a move fails half way, the tab's layout is restored. Zoomed tabs are left alo
 tern plugin install github.com/Emirfs/tern-plugins/split-columns
 ```
 
-Requires Tern 0.9.5 or later. Window-only plugin. Panes that arrive from the daemon (opened by `tern split`
-from a shell, or by another window) don't trigger the automatic conversion; use the palette command.
+Requires Tern 0.9.5 or later. Window-only plugin.
