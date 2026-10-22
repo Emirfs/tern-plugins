@@ -1,0 +1,7 @@
+schema = 1
+id = "split-columns"
+name = "Bağımsız sütunlar"
+version = "0.1.0"
+description = "Satır satır bölünmüş ızgarayı sütunlara çevirir: her sütunun yatay ayracı ayrı oynar, sağdakini kaydırınca soldaki kımıldamaz."
+icon = "columns"
+window = "window.luau"

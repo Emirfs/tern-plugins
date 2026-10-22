@@ -6,6 +6,7 @@ Plugins for [Tern](https://docs.stencil.so/tern/), one installable folder each.
 | --- | --- |
 | [omp-usage](omp-usage) | Remaining usage limits of every account across all omp profiles, in one pane |
 | [omp-profile](omp-profile) | The omp profile each pane runs, in every split's header (with its omp extension), the tab title and the status line |
+| [split-columns](split-columns) | Turns a grid of split rows into columns, so each column's divider moves on its own |
 
 ## Install
 
