@@ -5,7 +5,7 @@ Plugins for [Tern](https://docs.stencil.so/tern/), one installable folder each.
 | Plugin | What it does |
 | --- | --- |
 | [omp-usage](omp-usage) | Remaining usage limits of every account across all omp profiles, in one pane |
-| [omp-profile](omp-profile) | The omp profile of the focused pane, in the tab title and the status line |
+| [omp-profile](omp-profile) | The omp profile each pane runs, in every split's header (with its omp extension), the tab title and the status line |
 
 ## Install
 

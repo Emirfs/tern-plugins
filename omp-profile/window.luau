@@ -172,5 +172,10 @@ tern.chrome.tab_title(function(tab)
 		return nil
 	end
 	local base = if tab.name and tab.name ~= "" then tab.name else tab.title
-	return "[" .. name .. "] " .. base
+	local tag = "[" .. name .. "] "
+	-- omp eklentisi (omp-extension/profile-title.ts) başlığa zaten yazdıysa tekrarlama.
+	if string.sub(base, 1, #tag) == tag then
+		return nil
+	end
+	return tag .. base
 end)
