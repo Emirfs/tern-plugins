@@ -1,0 +1,7 @@
+schema = 1
+id = "omp-profile"
+name = "omp profil"
+version = "0.1.0"
+description = "Odaktaki pane'de çalışan omp oturumunun profilini durum satırında ve sekme başlığında gösterir."
+icon = "sparkle"
+window = "window.luau"
