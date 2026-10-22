@@ -6,6 +6,7 @@ description = "Tüm omp profillerindeki hesapların kalan kullanım limitleri, h
 icon = "sparkle"
 host = "host.luau"
 window = "window.luau"
+styles = ["style.css"]
 
 [[blocks]]
 id = "accounts"

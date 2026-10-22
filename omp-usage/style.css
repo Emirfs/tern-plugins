@@ -1,0 +1,15 @@
+/* Yığılı görünümde hiyerarşi: sağlayıcı başlığı öne çıkar, pencere satırları
+   hesabın altında girintili durur. Renkler temadan gelir. */
+
+.sf-main[data-surface='plugin.omp-usage.accounts'] [data-role='omp-usage.provider'] {
+	font-size: 1.12em;
+}
+
+.sf-main[data-surface='plugin.omp-usage.accounts'] [data-role='omp-usage.account'] {
+	padding-top: 2px;
+}
+
+.sf-main[data-surface='plugin.omp-usage.accounts'] [data-role='omp-usage.window'] {
+	padding-left: 16px;
+	font-variant-numeric: tabular-nums;
+}

@@ -608,7 +608,11 @@ local function with(node: Node, props: { [string]: any }): Node
 	return node
 end
 
-local THRESHOLDS = { 0.7, 0.9 }
+-- Yığılı görünüm: en az bu kadar sütun; bundan genişte yüzde ve süre sözcüklerle yazılır.
+local ROOMY_MIN_COLS = 44
+local ROOMY_WIDE_COLS = 64
+-- Yığılı görünümde sağlayıcı grupları arasındaki ayraç, satır cinsinden.
+local GROUP_GAP_LINES = 1
 
 -- Blok satırları pane hücrelerinden ~%40 daha uzun; bölge kenar boşlukları ~2 hücre.
 local ROW_CELLS = 1.4
@@ -634,10 +638,31 @@ type Layout = {
 	capacity: number,
 }
 
-local function remaining_spans(used: number, status: string?): { Span | string }
+-- Kalan orana göre renk: biten kırmızı, %20 altı sarı, gerisi temanın vurgu rengi.
+local function level_tone(left: number, status: string?): string?
+	if left <= 0.0001 or status == "exhausted" then
+		return "error"
+	elseif left < 0.2 then
+		return "warning"
+	end
+	return nil
+end
+
+local function remaining_spans(used: number, status: string?, suffix: string?): { Span | string }
 	local left = 1 - used
-	local tone = if left <= 0.0001 or status == "exhausted" then "error " elseif left < 0.2 then "warning " else ""
-	return { ui.span(pct(left), tone .. "strong") }
+	local tone = level_tone(left, status)
+	return { ui.span(pct(left) .. (suffix or ""), if tone then tone .. " strong" else "strong") }
+end
+
+-- Dolu çubuk = kalan kota (pil gibi), az kalınca sarı/kırmızı.
+local function remaining_meter_cell(cell: Cell): MeterCell
+	local left = 1 - cell.used
+	local m = ui.meter_cell(left)
+	local tone = level_tone(left, cell.status)
+	if tone then
+		m.meter.tone = tone
+	end
+	return m
 end
 
 -- E-postanın yerel kısmı ve varsa org/plan: "emir.sari · Inohom".
@@ -650,7 +675,7 @@ local function account_label(acc: Account, lead: { Span | string }, tone: string
 	local spans = table.clone(lead)
 	table.insert(spans, ui.span(who(acc), tone))
 	if acc.resets > 0 then
-		table.insert(spans, ui.span(string.format(" ↺%d", acc.resets), "success"))
+		table.insert(spans, ui.span(string.format(" +%d sıfırlama", acc.resets), "success"))
 	end
 	return spans
 end
@@ -663,15 +688,15 @@ local function window_cells(row: { any }, layout: Layout, cell: Cell?, note: { S
 		table.insert(row, remaining_spans(cell.used, cell.status))
 	end
 	if layout.bars then
-		table.insert(row, if cell then ui.meter_cell(cell.used, THRESHOLDS) else "")
+		table.insert(row, if cell then remaining_meter_cell(cell) else "")
 	end
 	if layout.resets then
 		table.insert(row, if cell then (note or { ui.span(until_text(cell.resets), "muted") }) else "")
 	end
 end
 
--- Birden çok hesabı olan sağlayıcının pencere toplamı: ortalama kullanım ve
--- kalan kota hesap cinsinden ("Σ 1.8/2").
+-- Birden çok hesabı olan sağlayıcının pencere toplamı: hesapların kalan
+-- kotasının ortalaması, yani toplam kotanın kalan yüzdesi.
 local function total_cell(prov: Provider, key: string): (Cell?, { Span | string }?)
 	local used, n = 0, 0
 	for _, acc in prov.accounts do
@@ -684,7 +709,7 @@ local function total_cell(prov: Provider, key: string): (Cell?, { Span | string 
 	if n == 0 then
 		return nil, nil
 	end
-	return { used = used / n }, { ui.span(string.format("Σ %.1f/%d", n - used, n), "muted") }
+	return { used = used / n }, { ui.span("toplam", "muted") }
 end
 
 -- Pane boyutuna göre ne sığar: dar pane'de önce çubuklar, sonra sıfırlanma
@@ -764,7 +789,7 @@ local function table_view(lines: { Line }, columns: { Column }, layout: Layout):
 			table.insert(cols, { id = "b" .. i, head = "", grow = 1, priority = -2 })
 		end
 		if layout.resets then
-			table.insert(cols, { id = "r" .. i, head = "↻", align = "end", priority = -1 })
+			table.insert(cols, { id = "r" .. i, head = "yenilenir", align = "end", priority = -1 })
 		end
 	end
 	local rows: { { any } } = {}
@@ -808,9 +833,103 @@ local function list_view(lines: { Line }, columns: { Column }, cx: BlockCx): Nod
 	return with(ui.list(items), { key = "accounts-list" })
 end
 
--- Hesap görünümü ve sığdığı kadar durum satırı.
+-- Geniş ve uzun pane için yığılı görünümün bir pencere satırı: pencere adı,
+-- kalan yüzde, kalanı gösteren çubuk ve yenilenmeye kalan süre.
+local function window_row(c: Column, cell: Cell?, wide: boolean, key: string): Node
+	local name = with(ui.text({ ui.span(c.label, "muted") }), { min = { w = "8ch" } })
+	if cell == nil then
+		return with(ui.row({ name, ui.text({ ui.span("raporlanmadı", "dim") }) }), { key = key, role = "omp-usage.window" })
+	end
+	local left = 1 - cell.used
+	local meter: { [string]: any } = { value = left, size = "md", grow = 1 }
+	meter.tone = level_tone(left, cell.status)
+	local reset = until_text(cell.resets)
+	return with(ui.row({
+		name,
+		with(ui.text(remaining_spans(cell.used, cell.status, if wide then " kaldı" else nil)), {
+			min = { w = if wide then "10ch" else "5ch" },
+		}),
+		ui.node("meter", meter),
+		with(ui.text({ ui.span(if wide then reset .. " sonra yenilenir" else reset, "muted") }), {
+			min = { w = if wide then "23ch" else "8ch" },
+		}),
+	}), { key = key, role = "omp-usage.window" })
+end
+
+-- Sağlayıcı başlığı: tek hesapta hesap adı, çok hesapta hesap sayısı ve
+-- pencere başına toplam kalan.
+local function provider_header(prov: Provider, columns: { Column }): Node
+	local spans: { Span | string } = { ui.span(provider_name(prov.id), "strong") }
+	if #prov.accounts == 1 then
+		for _, s in account_label(prov.accounts[1], { ui.span(" · ", "dim") }, "muted") do
+			table.insert(spans, s)
+		end
+	else
+		table.insert(spans, ui.span(string.format(" · %d hesap", #prov.accounts), "muted"))
+		local parts: { string } = {}
+		for _, c in columns do
+			local cell = total_cell(prov, c.key)
+			if cell then
+				table.insert(parts, c.label .. " " .. pct(1 - cell.used))
+			end
+		end
+		if #parts > 0 then
+			table.insert(spans, ui.span(" · toplam kalan " .. table.concat(parts, ", "), "muted"))
+		end
+	end
+	return with(ui.text(spans), { key = "head", role = "omp-usage.provider" })
+end
+
+-- Yığılı görünümün satır sayısı (tablo satırı biriminde).
+local function roomy_lines(providers: { Provider }, windows: number, status_count: number): number
+	local n = 0
+	for _, prov in providers do
+		local k = #prov.accounts
+		n += if k == 1 then 1 + windows else 1 + k * (1 + windows)
+	end
+	return n + (#providers - 1) * GROUP_GAP_LINES + status_count
+end
+
+-- Boş alanı okunabilirliğe harcayan görünüm: sağlayıcı grupları ayraçla
+-- ayrılır, her hesabın her penceresi kendi çubuğuyla bir satır. Sığmazsa nil.
+local function roomy_view(providers: { Provider }, columns: { Column }, status: { Node }, cx: BlockCx): { Node }?
+	if cx.cols < ROOMY_MIN_COLS then
+		return nil
+	end
+	if CHROME_CELLS + roomy_lines(providers, #columns, #status) * ROW_CELLS > cx.rows then
+		return nil
+	end
+	local wide = cx.cols >= ROOMY_WIDE_COLS
+	local children: { Node } = {}
+	for gi, prov in providers do
+		if gi > 1 then
+			table.insert(children, with(ui.rule(""), { key = "rule:" .. prov.id }))
+		end
+		local group: { Node } = { provider_header(prov, columns) }
+		for ai, acc in prov.accounts do
+			if #prov.accounts > 1 then
+				table.insert(group, with(ui.text(account_label(acc, {}, nil)), { key = "a" .. ai, role = "omp-usage.account" }))
+			end
+			for wi, c in columns do
+				table.insert(group, window_row(c, acc.windows[c.key], wide, string.format("a%dw%d", ai, wi)))
+			end
+		end
+		table.insert(children, with(ui.col(group), { key = "g:" .. prov.id }))
+	end
+	for _, line in status do
+		table.insert(children, line)
+	end
+	return children
+end
+
+-- Hesap görünümü ve sığdığı kadar durum satırı: yer varsa yığılı görünüm,
+-- yoksa tablo, en darda liste.
 local function accounts_view(providers: { Provider }, status: { Node }, cx: BlockCx): { Node }
 	local columns = columns_of(providers)
+	local roomy = roomy_view(providers, columns, status, cx)
+	if roomy then
+		return roomy
+	end
 	local layout = layout_for(providers, #columns, #status, cx)
 	local lines = lines_of(providers, columns, layout)
 	local body = if layout.tiny then list_view(lines, columns, cx) else table_view(lines, columns, layout)
@@ -841,11 +960,11 @@ local function status_lines(state: State, issues: { Issue }): { Node }
 	if state.loading then
 		table.insert(status, ui.span(" · yenileniyor…", "muted"))
 	elseif state.fetched then
-		table.insert(status, ui.span(" · " .. os.date("%H:%M", state.fetched), "muted"))
+		table.insert(status, ui.span(" · güncellendi " .. os.date("%H:%M", state.fetched), "muted"))
 	end
 	-- Dar pane'de ipucu satırı kaydırmasın diye düşer.
 	if state.cx.cols >= HINT_COLS then
-		table.insert(status, ui.span(" · r yenile · R önbelleksiz", "dim"))
+		table.insert(status, ui.span(" · r: yenile", "dim"))
 	end
 	local lines: { Node } = { with(ui.text(status), { key = "status" }) }
 
