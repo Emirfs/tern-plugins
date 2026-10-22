@@ -1,0 +1,12 @@
+schema = 1
+id = "omp-usage"
+name = "omp kullanım"
+version = "0.1.0"
+description = "Tüm omp profillerindeki hesapların kalan kullanım limitleri, hesap başına tekilleştirilmiş ve toplanmış."
+icon = "sparkle"
+host = "host.luau"
+window = "window.luau"
+
+[[blocks]]
+id = "accounts"
+title = "omp kullanım"

@@ -1,0 +1,11 @@
+# luau-lsp için `tern plugin types .` çıktısı; Tern sürümüne göre yeniden üretilir
+tern.d.luau
+
+# Editör / işletim sistemi
+.vscode/
+.idea/
+.DS_Store
+desktop.ini
+Thumbs.db
+.tmp.driveupload/
+.tmp.drivedownload/
