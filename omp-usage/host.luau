@@ -1,16 +1,33 @@
+--!strict
 -- `accounts` bloğu: her omp profili için `omp usage --json` çalıştırır,
 -- aynı hesabı (sağlayıcı + e-posta/org) profiller arasında tekilleştirir ve
 -- kalan limitleri hesap hesap, sağlayıcı başına toplamlarıyla gösterir.
+-- Toplama `lib/usage`, boyut kararları `lib/layout`, metinler `lib/i18n` içinde.
 --
--- Tuşlar: r yenile, R omp'nin kullanım önbelleğini temizleyip yenile.
+-- Tuşlar: r yenile, R omp'nin kullanım önbelleğini temizleyip yenile, l dil.
+
+local fmt = require("./lib/fmt")
+local i18n = require("./lib/i18n")
+local layout = require("./lib/layout")
+local usage = require("./lib/usage")
+
+type Account = usage.Account
+type Cell = usage.Cell
+type Column = usage.Column
+type Provider = usage.Provider
+type Issue = usage.Issue
+type Layout = layout.Layout
+type Strings = { [string]: string }
 
 local ui = tern.ui
 
 local REFRESH_MS = 2 * 60 * 1000
 local TICK_MS = 30 * 1000
 local OMP_TIMEOUT_MS = 60 * 1000
+-- Son başarılı çekimin kırpılmış kopyası: yeni pane ilk çekim bitmeden çizer.
+local CACHE_KEY = "cache"
+local CACHE_VERSION = 1
 
-local PROVIDER_ORDER = { "anthropic", "openai-codex", "google-antigravity" }
 local PROVIDER_NAMES = {
 	anthropic = "Claude",
 	["openai-codex"] = "Codex",
@@ -18,10 +35,15 @@ local PROVIDER_NAMES = {
 	["github-copilot"] = "Copilot",
 }
 
+-- Bir profil çalıştırmasının hatası; metne görünüm, o anki dilde çevirir.
+type RunError = { code: string, detail: string?, status: number? }
+
 type ProfileRun = {
 	name: string,
+	-- Son başarılı çıktı (kırpılmış); sonraki çekim başarısız olsa da kalır.
 	data: any?,
-	err: string?,
+	err: RunError?,
+	-- `data`nın alındığı an (epoch s).
 	at: number?,
 }
 
@@ -31,12 +53,18 @@ type State = {
 	order: { string },
 	loading: boolean,
 	fetched: number?,
+	-- Veri önbellekten geliyor, bu blok henüz kendi çekimini bitirmedi.
+	cached: boolean,
 	timer: TimerHandle?,
 	ticks: number,
 }
 
 -- Pane id'si yeniden başlatmada aynı kalır; state nesnesi bu çalışmayı tanımlar.
 local running: { [number]: State } = {}
+
+local function strings(): Strings
+	return i18n.strings(i18n.current(tern))
+end
 
 ---------------------------------------------------------------------------
 -- Ortam: ev dizini, profiller, omp yürütülebilir dosyası
@@ -76,21 +104,27 @@ local function discover_profiles(): { string }
 	return found
 end
 
--- Daemon'un PATH'i kabuğunkinden dar olabilir: önce adıyla, sonra bilinen yerler.
+-- Daemon'un PATH'i kabuğunkinden dar olabilir: önce adıyla, sonra bu işletim
+-- sisteminde omp'nin kurulduğu bilinen yerler.
 local function omp_candidates(): { string }
 	local list = { "omp" }
 	local home = home_dir()
-	local lad = tern.getenv("LOCALAPPDATA")
 	local extra: { string } = {}
-	if lad then
-		table.insert(extra, join(lad, "Tern\\omp\\bin\\omp.exe"))
+	if tern.runtime.os == "windows" then
+		local lad = tern.getenv("LOCALAPPDATA")
+		if lad then
+			table.insert(extra, join(lad, "Tern\\omp\\bin\\omp.exe"))
+		end
+		if home then
+			table.insert(extra, join(home, ".bun\\bin\\omp.exe"))
+		end
+	else
+		if home then
+			table.insert(extra, join(home, ".bun/bin/omp"))
+		end
+		table.insert(extra, "/opt/homebrew/bin/omp")
+		table.insert(extra, "/usr/local/bin/omp")
 	end
-	if home then
-		table.insert(extra, join(home, ".bun\\bin\\omp.exe"))
-		table.insert(extra, join(home, ".bun/bin/omp"))
-	end
-	table.insert(extra, "/opt/homebrew/bin/omp")
-	table.insert(extra, "/usr/local/bin/omp")
 	for _, path in extra do
 		if tern.fs.exists(path) then
 			table.insert(list, path)
@@ -101,14 +135,15 @@ end
 
 -- `omp [--profile P] <args>` çalıştırır. OMP_PROFILE, daemon ortamından
 -- sızabilecek PI_PROFILE'ı ezer; varsayılan profilde PI_CODING_AGENT_DIR de
--- sabitlenir. Hiçbir aday başlamazsa son başlatma hatasını döndürür.
-local function run_omp(profile: string, args: { string }, done: (ProcessResult) -> ()): string?
+-- sabitlenir. Hiçbir aday başlamazsa son başlatma hatasını döndürür (yoksa nil:
+-- "bulunamadı").
+local function run_omp(profile: string, args: { string }, done: (ProcessResult) -> ()): (boolean, string?)
 	local env: { [string]: string } = { OMP_PROFILE = profile, NO_COLOR = "1" }
 	local home = home_dir()
 	if profile == "default" and home then
 		env.PI_CODING_AGENT_DIR = join(join(home, ".omp"), "agent")
 	end
-	local last = "omp bu makinenin PATH'inde bulunamadı"
+	local last: string? = nil
 	for _, exe in omp_candidates() do
 		local argv: { string } = { exe }
 		if profile ~= "default" then
@@ -124,344 +159,49 @@ local function run_omp(profile: string, args: { string }, done: (ProcessResult) 
 			end)
 		end)
 		if ok then
-			return nil
+			return true, nil
 		end
 		last = tostring(err)
 	end
-	return last
+	return false, last
 end
 
 ---------------------------------------------------------------------------
--- Biçimlendirme
+-- Önbellek: son başarılı çekim, `tern.kv` içinde (bütün pane'ler ve pencereler paylaşır)
 
-local function first_line(text: string): string
-	return string.match(text, "[^\r\n]+") or ""
-end
-
-local function window_name(ms: number?): string
-	if not ms then
-		return "?"
+local function load_cache(state: State)
+	local ok, cache = pcall(tern.kv.get, CACHE_KEY)
+	if not ok or type(cache) ~= "table" or cache.v ~= CACHE_VERSION or type(cache.profiles) ~= "table" then
+		return
 	end
-	local hours = ms / 3600000
-	if hours < 48 then
-		return string.format("%d saat", math.floor(hours + 0.5))
-	end
-	return string.format("%d gün", math.floor(hours / 24 + 0.5))
-end
-
-local function until_text(resets_ms: number?): string
-	if type(resets_ms) ~= "number" then
-		return "—"
-	end
-	local s = math.floor(resets_ms / 1000 - os.time())
-	if s <= 0 then
-		return "şimdi"
-	elseif s < 60 then
-		return "<1dk"
-	elseif s < 3600 then
-		return string.format("%ddk", s // 60)
-	elseif s < 86400 then
-		return string.format("%dsa%02ddk", s // 3600, (s % 3600) // 60)
-	end
-	return string.format("%dg%02dsa", s // 86400, (s % 86400) // 3600)
-end
-
-local function pct(fraction: number): string
-	return string.format("%%%d", math.floor(fraction * 100 + 0.5))
-end
-
-local function provider_name(id: string): string
-	return PROVIDER_NAMES[id] or id
-end
-
----------------------------------------------------------------------------
--- Toplama
-
-type Limit = {
-	key: string,
-	label: string,
-	used: number?,
-	resets: number?,
-	duration: number?,
-	meter: string?,
-	status: string?,
-}
-
-type Account = {
-	provider: string,
-	key: string,
-	label: string,
-	org: string?,
-	profiles: { string },
-	fetched: number,
-	limits: { Limit },
-	resets: number,
-	windows: { [string]: Cell },
-}
-
--- Bir hesabın bir penceredeki bağlayıcı (en çok kullanılmış) limiti.
-type Cell = { used: number, resets: number?, status: string? }
-
--- Tablonun bir pencere sütunu: süre (5 saat, 7 gün) ve varsa ayrı kota havuzu.
-type Column = { key: string, label: string, duration: number?, meter: string? }
-
-type Provider = { id: string, accounts: { Account } }
-
-type Issue = { provider: string, who: string, text: string, profiles: { string } }
-
--- omp'nin `resolveUsedFraction` karşılığı: kullanılan oran, 0–1.
-local function used_fraction(amount: any): number?
-	if type(amount) ~= "table" then
-		return nil
-	end
-	local f: number? = nil
-	if type(amount.usedFraction) == "number" then
-		f = amount.usedFraction
-	elseif type(amount.used) == "number" and type(amount.limit) == "number" and amount.limit > 0 then
-		f = amount.used / amount.limit
-	elseif type(amount.remainingFraction) == "number" then
-		f = 1 - amount.remainingFraction
-	end
-	if f == nil then
-		return nil
-	end
-	return math.clamp(f, 0, 1)
-end
-
--- omp'nin `meterForLimit` karşılığı: aynı pencerede ayrı kota havuzu tutan limitler.
-local function meter_of(provider: string, limit: any): string?
-	if provider ~= "anthropic" and provider ~= "openai-codex" then
-		return nil
-	end
-	local scope = if type(limit.scope) == "table" then limit.scope else {}
-	local tier = if type(scope.tier) == "string" then string.lower(string.match(scope.tier, "^%s*(.-)%s*$") or "") else ""
-	if tier ~= "" then
-		return tier
-	end
-	if provider ~= "openai-codex" then
-		return nil
-	end
-	local slug = string.match(string.lower(tostring(limit.id or "")), "^[^:]*:([^:]+)")
-	if slug and slug ~= "primary" and slug ~= "secondary" then
-		return slug
-	end
-	return "chat"
-end
-
-local function limit_label(limit: any): string
-	local label = tostring(limit.label or limit.id or "?")
-	local win = if type(limit.window) == "table" then limit.window.label else nil
-	if type(win) == "string" and not string.find(string.lower(label), string.lower(win), 1, true) then
-		return label .. " (" .. win .. ")"
-	end
-	return label
-end
-
-local function identity(provider: string, md: any): string?
-	if type(md) ~= "table" then
-		return nil
-	end
-	if type(md.email) == "string" then
-		return provider .. "|email:" .. string.lower(md.email) .. (if type(md.orgId) == "string" then "|org:" .. md.orgId else "")
-	end
-	if type(md.accountId) == "string" then
-		return provider .. "|acct:" .. md.accountId
-	end
-	return nil
-end
-
-local function org_text(md: any): string?
-	if type(md) ~= "table" or type(md.orgName) ~= "string" then
-		return nil
-	end
-	if type(md.email) == "string" and md.orgName == md.email .. "'s Organization" then
-		return nil
-	end
-	return md.orgName
-end
-
-local function add_unique(list: { string }, value: string)
-	if not table.find(list, value) then
-		table.insert(list, value)
-	end
-end
-
-local function account_of(provider: string, report: any, profile: string, index: number): Account
-	local md = report.metadata
-	local key = identity(provider, md) or (provider .. "|" .. profile .. "#" .. index)
-	local label = if type(md) == "table" then (md.email or md.accountId or md.projectId) else nil
-	local limits: { Limit } = {}
-	local seen: { [string]: boolean } = {}
-	for _, limit in (if type(report.limits) == "table" then report.limits else {}) do
-		local scope = if type(limit.scope) == "table" then limit.scope else {}
-		local window = if type(limit.window) == "table" then limit.window else {}
-		-- Antigravity aynı paylaşılan kotayı (Claude & GPT) iki kez raporlar.
-		local lkey = if type(scope.sharedGroup) == "string" then "g:" .. scope.sharedGroup else "i:" .. tostring(limit.id)
-		if not seen[lkey] then
-			seen[lkey] = true
-			table.insert(limits, {
-				key = lkey,
-				label = limit_label(limit),
-				used = used_fraction(limit.amount),
-				resets = if type(window.resetsAt) == "number" then window.resetsAt else nil,
-				duration = if type(window.durationMs) == "number" then window.durationMs else nil,
-				meter = meter_of(provider, limit),
-				status = if type(limit.status) == "string" then limit.status else nil,
-			})
+	local order: { string } = {}
+	for _, name in (if type(cache.order) == "table" then cache.order else {}) do
+		local entry = cache.profiles[name]
+		if type(name) == "string" and type(entry) == "table" and type(entry.data) == "table" then
+			table.insert(order, name)
+			state.profiles[name] = { name = name, data = entry.data, at = entry.at }
 		end
 	end
-	table.sort(limits, function(a, b)
-		local da, db = a.duration or math.huge, b.duration or math.huge
-		if da ~= db then
-			return da < db
-		end
-		return a.label < b.label
-	end)
-	local credits = if type(report.resetCredits) == "table" then report.resetCredits.availableCount else nil
-	return {
-		provider = provider,
-		key = key,
-		label = tostring(label or "bilinmeyen hesap"),
-		org = org_text(md),
-		profiles = { profile },
-		fetched = if type(report.fetchedAt) == "number" then report.fetchedAt else 0,
-		limits = limits,
-		resets = if type(credits) == "number" then credits else 0,
-		windows = {},
-	}
-end
-
--- Pencere anahtarı süreye göre; Codex'in varsayılan "chat" havuzu dışındaki
--- ayrı havuzlar (model kapsamlı tier, Spark) kendi sütununu alır.
-local function window_key(l: Limit): string
-	local wkey = if l.duration then "d:" .. l.duration else "l:" .. l.label
-	local meter = if l.meter == "chat" then nil else l.meter
-	return if meter then wkey .. "|m:" .. meter else wkey
-end
-
--- omp'nin `computeProviderWindowStats` mantığı: pencere başına hesabın en çok
--- kullanılan limiti o pencerede hesabı bağlar.
-local function windows_of(acc: Account): { [string]: Cell }
-	local out: { [string]: Cell } = {}
-	for _, l in acc.limits do
-		local used = l.used
-		if used ~= nil then
-			local key = window_key(l)
-			local c = out[key]
-			if c == nil or used > c.used then
-				out[key] = { used = used, resets = l.resets, status = l.status }
-			end
-		end
+	if #order > 0 then
+		state.order = order
+		state.fetched = if type(cache.fetched) == "number" then cache.fetched else nil
+		state.cached = true
 	end
-	return out
 end
 
-local function columns_of(providers: { Provider }): { Column }
-	local seen: { [string]: boolean } = {}
-	local list: { Column } = {}
-	for _, prov in providers do
-		for _, acc in prov.accounts do
-			for _, l in acc.limits do
-				local key = window_key(l)
-				if l.used ~= nil and not seen[key] then
-					seen[key] = true
-					local meter = if l.meter == "chat" then nil else l.meter
-					local label = if l.duration then window_name(l.duration) else l.label
-					table.insert(list, {
-						key = key,
-						label = if meter then label .. " " .. meter else label,
-						duration = l.duration,
-						meter = meter,
-					})
-				end
-			end
-		end
-	end
-	table.sort(list, function(a, b)
-		local da, db = a.duration or math.huge, b.duration or math.huge
-		if da ~= db then
-			return da < db
-		end
-		return (a.meter or "") < (b.meter or "")
-	end)
-	return list
-end
-
-local function aggregate(state: State): ({ Provider }, { Issue })
-	local by_key: { [string]: Account } = {}
-	local by_provider: { [string]: { Account } } = {}
-	local issues: { [string]: Issue } = {}
-	local issue_list: { Issue } = {}
-
-	local function issue(provider: string, entry: any, text: string, profile: string)
-		local who = tostring(entry.email or entry.accountId or entry.orgName or "?")
-		local key = provider .. "|" .. who .. "|" .. text
-		local found = issues[key]
-		if found then
-			add_unique(found.profiles, profile)
-			return
-		end
-		local item: Issue = { provider = provider, who = who, text = text, profiles = { profile } }
-		issues[key] = item
-		table.insert(issue_list, item)
-	end
-
+local function store_cache(state: State)
+	local profiles: { [string]: any } = {}
+	local any_data = false
 	for _, name in state.order do
-		local data = state.profiles[name] and state.profiles[name].data
-		if type(data) == "table" then
-			for i, report in (if type(data.reports) == "table" then data.reports else {}) do
-				local provider = tostring(report.provider or "?")
-				local acc = account_of(provider, report, name, i)
-				local prev = by_key[acc.key]
-				if prev then
-					add_unique(prev.profiles, name)
-					-- Aynı hesabın en taze raporu kazanır.
-					if acc.fetched > prev.fetched then
-						prev.fetched, prev.limits, prev.resets = acc.fetched, acc.limits, acc.resets
-						prev.org = acc.org or prev.org
-					end
-				else
-					by_key[acc.key] = acc
-					by_provider[provider] = by_provider[provider] or {}
-					table.insert(by_provider[provider], acc)
-				end
-			end
-			for _, entry in (if type(data.accountsWithoutUsage) == "table" then data.accountsWithoutUsage else {}) do
-				issue(tostring(entry.provider or "?"), entry, "kullanım raporu yok", name)
-			end
-			for _, entry in (if type(data.disabledCredentials) == "table" then data.disabledCredentials else {}) do
-				issue(tostring(entry.provider or "?"), entry, "devre dışı: " .. first_line(tostring(entry.cause or "")), name)
-			end
+		local run = state.profiles[name]
+		if run and run.data then
+			profiles[name] = { data = run.data, at = run.at }
+			any_data = true
 		end
 	end
-
-	local ids: { string } = {}
-	for id in by_provider do
-		table.insert(ids, id)
+	if any_data then
+		pcall(tern.kv.set, CACHE_KEY, { v = CACHE_VERSION, fetched = state.fetched, order = state.order, profiles = profiles })
 	end
-	table.sort(ids, function(a, b)
-		local ia, ib = table.find(PROVIDER_ORDER, a) or 99, table.find(PROVIDER_ORDER, b) or 99
-		if ia ~= ib then
-			return ia < ib
-		end
-		return a < b
-	end)
-
-	local providers: { Provider } = {}
-	for _, id in ids do
-		local accounts = by_provider[id]
-		table.sort(accounts, function(a, b)
-			return a.label < b.label
-		end)
-		for _, acc in accounts do
-			table.sort(acc.profiles)
-		end
-		for _, acc in accounts do
-			acc.windows = windows_of(acc)
-		end
-		table.insert(providers, { id = id, accounts = accounts })
-	end
-	return providers, issue_list
 end
 
 ---------------------------------------------------------------------------
@@ -493,7 +233,12 @@ local function alive(state: State): boolean
 end
 
 -- Her profil için `args` çalıştırır; hepsi bitince `finish` çağrılır.
-local function each_profile(state: State, args: { string }, on_result: (string, ProcessResult?, string?) -> (), finish: () -> ())
+local function each_profile(
+	state: State,
+	args: { string },
+	on_result: (string, ProcessResult?, RunError?) -> (),
+	finish: () -> ()
+)
 	local names = discover_profiles()
 	state.order = names
 	if #names == 0 then
@@ -508,16 +253,37 @@ local function each_profile(state: State, args: { string }, on_result: (string, 
 		end
 	end
 	for _, name in names do
-		local spawn_error = run_omp(name, args, function(result)
+		local started, spawn_error = run_omp(name, args, function(result)
 			if not alive(state) then
 				return
 			end
 			on_result(name, result, nil)
 			settle()
 		end)
-		if spawn_error then
-			on_result(name, nil, spawn_error)
+		if not started then
+			on_result(name, nil, if spawn_error then { code = "err_spawn", detail = spawn_error } else { code = "err_not_found" })
 			settle()
+		end
+	end
+end
+
+-- Bir çalıştırmanın sonucu: veri ya da hata. Hata önceki veriyi silmez.
+local function apply_result(run: ProfileRun, result: ProcessResult?, spawn_error: RunError?)
+	if spawn_error then
+		run.err = spawn_error
+	elseif result == nil then
+		run.err = { code = "err_none" }
+	elseif result.timed_out then
+		run.err = { code = "err_timeout" }
+	elseif result.status ~= 0 then
+		run.err = { code = "err_status", status = result.status, detail = fmt.first_line(result.stderr) }
+	else
+		local ok, data = pcall(tern.json.decode, result.stdout)
+		local trimmed = if ok then usage.trim(data) else nil
+		if trimmed then
+			run.data, run.err, run.at = trimmed, nil, os.time()
+		else
+			run.err = { code = "err_output", detail = fmt.first_line(result.stdout) }
 		end
 	end
 end
@@ -532,22 +298,7 @@ local function refresh(state: State, invalidate: boolean?)
 		each_profile(state, { "usage", "--json" }, function(name, result, spawn_error)
 			local run = state.profiles[name] or { name = name }
 			state.profiles[name] = run
-			if spawn_error then
-				run.err = "omp başlatılamadı: " .. spawn_error
-			elseif result == nil then
-				run.err = "sonuç yok"
-			elseif result.timed_out then
-				run.err = "omp 60 saniyede yanıt vermedi"
-			elseif result.status ~= 0 then
-				run.err = "omp çıkış kodu " .. result.status .. ": " .. first_line(result.stderr)
-			else
-				local ok, data = pcall(tern.json.decode, result.stdout)
-				if ok and type(data) == "table" and type(data.reports) == "table" then
-					run.data, run.err, run.at = data, nil, os.time()
-				else
-					run.err = "omp beklenmeyen çıktı verdi: " .. first_line(result.stdout)
-				end
-			end
+			apply_result(run, result, spawn_error)
 		end, function()
 			if not alive(state) then
 				return
@@ -560,6 +311,8 @@ local function refresh(state: State, invalidate: boolean?)
 			end
 			state.loading = false
 			state.fetched = os.time()
+			state.cached = false
+			store_cache(state)
 			state.cx:render()
 		end)
 	end
@@ -608,35 +361,17 @@ local function with(node: Node, props: { [string]: any }): Node
 	return node
 end
 
--- Yığılı görünüm: en az bu kadar sütun; bundan genişte yüzde ve süre sözcüklerle yazılır.
-local ROOMY_MIN_COLS = 44
-local ROOMY_WIDE_COLS = 64
--- Yığılı görünümde sağlayıcı grupları arasındaki ayraç, satır cinsinden.
-local GROUP_GAP_LINES = 1
+local function provider_name(id: string): string
+	return PROVIDER_NAMES[id] or id
+end
 
--- Blok satırları pane hücrelerinden ~%40 daha uzun; bölge kenar boşlukları ~2 hücre.
-local ROW_CELLS = 1.4
-local CHROME_CELLS = 2
--- Sütun genişlikleri, hücre: hesap etiketi, pencere başına kalan+sıfırlanma,
--- çubuk, yalnız kalan yüzdesi.
-local ACCOUNT_COLS = 18
-local WINDOW_COLS = 15
-local BAR_COLS = 15
-local PCT_COLS = 7
--- Bunun altında tablo yerine liste: etiket kırpılır, yüzdeler sağda kalır.
-local TINY_COLS = 30
--- Durum satırındaki tuş ipucu bundan dar pane'de gösterilmez.
-local HINT_COLS = 50
-
-type Layout = {
-	bars: boolean,
-	resets: boolean,
-	narrow: boolean,
-	tiny: boolean,
-	collapse: boolean,
-	table_lines: number,
-	capacity: number,
-}
+local function shape_of(providers: { Provider }): layout.Shape
+	local shape: layout.Shape = {}
+	for _, prov in providers do
+		table.insert(shape, #prov.accounts)
+	end
+	return shape
+end
 
 -- Kalan orana göre renk: biten kırmızı, %20 altı sarı, gerisi temanın vurgu rengi.
 local function level_tone(left: number, status: string?): string?
@@ -648,10 +383,10 @@ local function level_tone(left: number, status: string?): string?
 	return nil
 end
 
-local function remaining_spans(used: number, status: string?, suffix: string?): { Span | string }
+local function remaining_spans(used: number, status: string?, L: Strings, suffix: string?): { Span | string }
 	local left = 1 - used
 	local tone = level_tone(left, status)
-	return { ui.span(pct(left) .. (suffix or ""), if tone then tone .. " strong" else "strong") }
+	return { ui.span(fmt.pct(left, L) .. (suffix or ""), if tone then tone .. " strong" else "strong") }
 end
 
 -- Dolu çubuk = kalan kota (pil gibi), az kalınca sarı/kırmızı.
@@ -666,38 +401,39 @@ local function remaining_meter_cell(cell: Cell): MeterCell
 end
 
 -- E-postanın yerel kısmı ve varsa org/plan: "emir.sari · Inohom".
-local function who(acc: Account): string
-	local name = string.match(acc.label, "^([^@]+)@") or acc.label
+local function who(acc: Account, L: Strings): string
+	local label = acc.label or L.unknown_account
+	local name = string.match(label, "^([^@]+)@") or label
 	return if acc.org then name .. " · " .. acc.org else name
 end
 
-local function account_label(acc: Account, lead: { Span | string }, tone: string?): { Span | string }
+local function account_label(acc: Account, lead: { Span | string }, tone: string?, L: Strings): { Span | string }
 	local spans = table.clone(lead)
-	table.insert(spans, ui.span(who(acc), tone))
+	table.insert(spans, ui.span(who(acc, L), tone))
 	if acc.resets > 0 then
-		table.insert(spans, ui.span(string.format(" +%d sıfırlama", acc.resets), "success"))
+		table.insert(spans, ui.span(string.format(L.resets_credit, acc.resets), "success"))
 	end
 	return spans
 end
 
 -- Bir satırın pencere hücreleri: kalan, (çubuk), (sıfırlanma ya da toplam notu).
-local function window_cells(row: { any }, layout: Layout, cell: Cell?, note: { Span | string }?)
+local function window_cells(row: { any }, lay: Layout, cell: Cell?, note: { Span | string }?, L: Strings)
 	if cell == nil then
 		table.insert(row, { ui.span("—", "dim") })
 	else
-		table.insert(row, remaining_spans(cell.used, cell.status))
+		table.insert(row, remaining_spans(cell.used, cell.status, L))
 	end
-	if layout.bars then
+	if lay.bars then
 		table.insert(row, if cell then remaining_meter_cell(cell) else "")
 	end
-	if layout.resets then
-		table.insert(row, if cell then (note or { ui.span(until_text(cell.resets), "muted") }) else "")
+	if lay.resets then
+		table.insert(row, if cell then (note or { ui.span(fmt.until_text(cell.resets, os.time(), L), "muted") }) else "")
 	end
 end
 
 -- Birden çok hesabı olan sağlayıcının pencere toplamı: hesapların kalan
 -- kotasının ortalaması, yani toplam kotanın kalan yüzdesi.
-local function total_cell(prov: Provider, key: string): (Cell?, { Span | string }?)
+local function total_cell(prov: Provider, key: string, L: Strings): (Cell?, { Span | string }?)
 	local used, n = 0, 0
 	for _, acc in prov.accounts do
 		local c = acc.windows[key]
@@ -709,30 +445,7 @@ local function total_cell(prov: Provider, key: string): (Cell?, { Span | string 
 	if n == 0 then
 		return nil, nil
 	end
-	return { used = used / n }, { ui.span("toplam", "muted") }
-end
-
--- Pane boyutuna göre ne sığar: dar pane'de önce çubuklar, sonra sıfırlanma
--- sütunları, en darda e-postalar düşer ve liste görünümüne geçilir; kısa ya da
--- çok dar pane'de çok hesaplı sağlayıcılar tek toplam satırına iner. Böylece
--- görünüm kaydırma istemez.
-local function layout_for(providers: { Provider }, windows: number, extra_lines: number, cx: BlockCx): Layout
-	local lines = 0
-	for _, prov in providers do
-		lines += if #prov.accounts > 1 then #prov.accounts + 1 else 1
-	end
-	local capacity = math.floor((cx.rows - CHROME_CELLS) / ROW_CELLS)
-	local tiny = cx.cols < TINY_COLS
-	local collapse = tiny or 1 + lines + extra_lines > capacity
-	return {
-		bars = cx.cols >= ACCOUNT_COLS + windows * (WINDOW_COLS + BAR_COLS),
-		resets = cx.cols >= ACCOUNT_COLS + windows * WINDOW_COLS,
-		narrow = cx.cols < ACCOUNT_COLS + windows * PCT_COLS,
-		tiny = tiny,
-		collapse = collapse,
-		table_lines = 1 + (if collapse then #providers else lines),
-		capacity = capacity,
-	}
+	return { used = used / n }, { ui.span(L.total, "muted") }
 end
 
 -- Görünümün bir satırı: etiket ve sütun başına hücre (toplam satırında not).
@@ -747,31 +460,33 @@ local function account_line(label: { Span | string }, acc: Account, columns: { C
 end
 
 -- Tek hesaplı sağlayıcı bir satır; çok hesaplıda toplam satırı ve (sığarsa) altında hesaplar.
-local function lines_of(providers: { Provider }, columns: { Column }, layout: Layout): { Line }
+local function lines_of(providers: { Provider }, columns: { Column }, lay: Layout, L: Strings): { Line }
 	local out: { Line } = {}
 	for _, prov in providers do
 		local name = provider_name(prov.id)
 		if #prov.accounts == 1 then
 			local acc = prov.accounts[1]
-			local label = if layout.narrow
+			local label = if lay.narrow
 				then { ui.span(name, "strong") }
-				else account_label(acc, { ui.span(name .. " ", "strong") }, "muted")
+				else account_label(acc, { ui.span(name .. " ", "strong") }, "muted", L)
 			table.insert(out, account_line(label, acc, columns))
 		else
 			local label: { Span | string } = { ui.span(name, "strong") }
-			if not layout.narrow then
-				table.insert(label, ui.span(string.format(" %d hesap", #prov.accounts), "muted"))
+			if not lay.narrow then
+				table.insert(label, ui.span(string.format(L.n_accounts, #prov.accounts), "muted"))
 			end
 			local total: Line = { label = label, cells = {}, notes = {} }
 			for i, c in columns do
-				local cell, note = total_cell(prov, c.key)
-				total.cells[i] = cell
-				total.notes[i] = note
+				local cell, note = total_cell(prov, c.key, L)
+				if cell and note then
+					total.cells[i] = cell
+					total.notes[i] = note
+				end
 			end
 			table.insert(out, total)
-			if not layout.collapse then
+			if not lay.collapse then
 				for _, acc in prov.accounts do
-					table.insert(out, account_line(account_label(acc, { ui.span("› ", "dim") }, nil), acc, columns))
+					table.insert(out, account_line(account_label(acc, { ui.span("› ", "dim") }, nil, L), acc, columns))
 				end
 			end
 		end
@@ -781,22 +496,22 @@ end
 
 -- Tablo: sütunlar en düşük öncelikten gizlenir (çubuk, sıfırlanma, sonraki
 -- pencereler); etiket ve ilk pencere en son.
-local function table_view(lines: { Line }, columns: { Column }, layout: Layout): Node
-	local cols: { Col } = { { id = "account", head = "Hesap", grow = 1, truncate = "end", priority = 3 } }
+local function table_view(lines: { Line }, columns: { Column }, lay: Layout, L: Strings): Node
+	local cols: { Col } = { { id = "account", head = L.col_account, grow = 1, truncate = "end", priority = 3 } }
 	for i, c in columns do
 		table.insert(cols, { id = "p" .. i, head = c.label, align = "end", priority = if i == 1 then 2 else 1 })
-		if layout.bars then
+		if lay.bars then
 			table.insert(cols, { id = "b" .. i, head = "", grow = 1, priority = -2 })
 		end
-		if layout.resets then
-			table.insert(cols, { id = "r" .. i, head = "yenilenir", align = "end", priority = -1 })
+		if lay.resets then
+			table.insert(cols, { id = "r" .. i, head = L.col_resets, align = "end", priority = -1 })
 		end
 	end
 	local rows: { { any } } = {}
 	for _, line in lines do
 		local row: { any } = { line.label }
 		for i in columns do
-			window_cells(row, layout, line.cells[i], line.notes[i])
+			window_cells(row, lay, line.cells[i], line.notes[i], L)
 		end
 		table.insert(rows, row)
 	end
@@ -805,14 +520,15 @@ end
 
 -- En dar pane: tablo etiketi taşıyamaz; liste etiketi kırpar, sığan kadar
 -- pencerenin yüzdesi sağda kalır.
-local function list_view(lines: { Line }, columns: { Column }, cx: BlockCx): Node
+local function list_view(lines: { Line }, columns: { Column }, cx: BlockCx, L: Strings): Node
 	local shown = math.clamp(math.floor((cx.cols - 9) / 5), 1, math.max(1, #columns))
 	local heads: { string } = {}
 	for i = 1, math.min(shown, #columns) do
-		local short = string.gsub(string.gsub(columns[i].label, " saat", "s"), " gün", "g")
-		table.insert(heads, short)
+		local c = columns[i]
+		local short = if c.duration then fmt.window_name(c.duration, L, true) else c.label
+		table.insert(heads, if c.meter then short .. " " .. c.meter else short)
 	end
-	local items: { Item } = { { label = { ui.span("Hesap", "dim") }, value = { ui.span(table.concat(heads, " "), "dim") } } }
+	local items: { Item } = { { label = { ui.span(L.col_account, "dim") }, value = { ui.span(table.concat(heads, " "), "dim") } } }
 	for _, line in lines do
 		local value: { Span | string } = {}
 		for i = 1, math.min(shown, #columns) do
@@ -821,7 +537,7 @@ local function list_view(lines: { Line }, columns: { Column }, cx: BlockCx): Nod
 			end
 			local cell = line.cells[i]
 			if cell then
-				for _, s in remaining_spans(cell.used, cell.status) do
+				for _, s in remaining_spans(cell.used, cell.status, L) do
 					table.insert(value, s)
 				end
 			else
@@ -835,22 +551,22 @@ end
 
 -- Geniş ve uzun pane için yığılı görünümün bir pencere satırı: pencere adı,
 -- kalan yüzde, kalanı gösteren çubuk ve yenilenmeye kalan süre.
-local function window_row(c: Column, cell: Cell?, wide: boolean, key: string): Node
+local function window_row(c: Column, cell: Cell?, wide: boolean, key: string, L: Strings): Node
 	local name = with(ui.text({ ui.span(c.label, "muted") }), { min = { w = "8ch" } })
 	if cell == nil then
-		return with(ui.row({ name, ui.text({ ui.span("raporlanmadı", "dim") }) }), { key = key, role = "omp-usage.window" })
+		return with(ui.row({ name, ui.text({ ui.span(L.not_reported, "dim") }) }), { key = key, role = "omp-usage.window" })
 	end
 	local left = 1 - cell.used
 	local meter: { [string]: any } = { value = left, size = "md", grow = 1 }
 	meter.tone = level_tone(left, cell.status)
-	local reset = until_text(cell.resets)
+	local reset = fmt.until_text(cell.resets, os.time(), L)
 	return with(ui.row({
 		name,
-		with(ui.text(remaining_spans(cell.used, cell.status, if wide then " kaldı" else nil)), {
+		with(ui.text(remaining_spans(cell.used, cell.status, L, if wide then L.left else nil)), {
 			min = { w = if wide then "10ch" else "5ch" },
 		}),
 		ui.node("meter", meter),
-		with(ui.text({ ui.span(if wide then reset .. " sonra yenilenir" else reset, "muted") }), {
+		with(ui.text({ ui.span(if wide then string.format(L.resets_in, reset) else reset, "muted") }), {
 			min = { w = if wide then "23ch" else "8ch" },
 		}),
 	}), { key = key, role = "omp-usage.window" })
@@ -858,60 +574,47 @@ end
 
 -- Sağlayıcı başlığı: tek hesapta hesap adı, çok hesapta hesap sayısı ve
 -- pencere başına toplam kalan.
-local function provider_header(prov: Provider, columns: { Column }): Node
+local function provider_header(prov: Provider, columns: { Column }, L: Strings): Node
 	local spans: { Span | string } = { ui.span(provider_name(prov.id), "strong") }
 	if #prov.accounts == 1 then
-		for _, s in account_label(prov.accounts[1], { ui.span(" · ", "dim") }, "muted") do
+		for _, s in account_label(prov.accounts[1], { ui.span(" · ", "dim") }, "muted", L) do
 			table.insert(spans, s)
 		end
 	else
-		table.insert(spans, ui.span(string.format(" · %d hesap", #prov.accounts), "muted"))
+		table.insert(spans, ui.span(" ·" .. string.format(L.n_accounts, #prov.accounts), "muted"))
 		local parts: { string } = {}
 		for _, c in columns do
-			local cell = total_cell(prov, c.key)
+			local cell = total_cell(prov, c.key, L)
 			if cell then
-				table.insert(parts, c.label .. " " .. pct(1 - cell.used))
+				table.insert(parts, c.label .. " " .. fmt.pct(1 - cell.used, L))
 			end
 		end
 		if #parts > 0 then
-			table.insert(spans, ui.span(" · toplam kalan " .. table.concat(parts, ", "), "muted"))
+			table.insert(spans, ui.span(string.format(L.total_left, table.concat(parts, ", ")), "muted"))
 		end
 	end
 	return with(ui.text(spans), { key = "head", role = "omp-usage.provider" })
 end
 
--- Yığılı görünümün satır sayısı (tablo satırı biriminde).
-local function roomy_lines(providers: { Provider }, windows: number, status_count: number): number
-	local n = 0
-	for _, prov in providers do
-		local k = #prov.accounts
-		n += if k == 1 then 1 + windows else 1 + k * (1 + windows)
-	end
-	return n + (#providers - 1) * GROUP_GAP_LINES + status_count
-end
-
 -- Boş alanı okunabilirliğe harcayan görünüm: sağlayıcı grupları ayraçla
 -- ayrılır, her hesabın her penceresi kendi çubuğuyla bir satır. Sığmazsa nil.
-local function roomy_view(providers: { Provider }, columns: { Column }, status: { Node }, cx: BlockCx): { Node }?
-	if cx.cols < ROOMY_MIN_COLS then
+local function roomy_view(providers: { Provider }, columns: { Column }, status: { Node }, cx: BlockCx, L: Strings): { Node }?
+	local fits, wide = layout.roomy(shape_of(providers), #columns, #status, cx.cols, cx.rows)
+	if not fits then
 		return nil
 	end
-	if CHROME_CELLS + roomy_lines(providers, #columns, #status) * ROW_CELLS > cx.rows then
-		return nil
-	end
-	local wide = cx.cols >= ROOMY_WIDE_COLS
 	local children: { Node } = {}
 	for gi, prov in providers do
 		if gi > 1 then
 			table.insert(children, with(ui.rule(""), { key = "rule:" .. prov.id }))
 		end
-		local group: { Node } = { provider_header(prov, columns) }
+		local group: { Node } = { provider_header(prov, columns, L) }
 		for ai, acc in prov.accounts do
 			if #prov.accounts > 1 then
-				table.insert(group, with(ui.text(account_label(acc, {}, nil)), { key = "a" .. ai, role = "omp-usage.account" }))
+				table.insert(group, with(ui.text(account_label(acc, {}, nil, L)), { key = "a" .. ai, role = "omp-usage.account" }))
 			end
 			for wi, c in columns do
-				table.insert(group, window_row(c, acc.windows[c.key], wide, string.format("a%dw%d", ai, wi)))
+				table.insert(group, window_row(c, acc.windows[c.key], wide, string.format("a%dw%d", ai, wi), L))
 			end
 		end
 		table.insert(children, with(ui.col(group), { key = "g:" .. prov.id }))
@@ -924,18 +627,18 @@ end
 
 -- Hesap görünümü ve sığdığı kadar durum satırı: yer varsa yığılı görünüm,
 -- yoksa tablo, en darda liste.
-local function accounts_view(providers: { Provider }, status: { Node }, cx: BlockCx): { Node }
-	local columns = columns_of(providers)
-	local roomy = roomy_view(providers, columns, status, cx)
+local function accounts_view(providers: { Provider }, status: { Node }, cx: BlockCx, L: Strings): { Node }
+	local columns = usage.columns_of(providers, L)
+	local roomy = roomy_view(providers, columns, status, cx, L)
 	if roomy then
 		return roomy
 	end
-	local layout = layout_for(providers, #columns, #status, cx)
-	local lines = lines_of(providers, columns, layout)
-	local body = if layout.tiny then list_view(lines, columns, cx) else table_view(lines, columns, layout)
+	local lay = layout.table_for(shape_of(providers), #columns, #status, cx.cols, cx.rows)
+	local lines = lines_of(providers, columns, lay, L)
+	local body = if lay.tiny then list_view(lines, columns, cx, L) else table_view(lines, columns, lay, L)
 	local children: { Node } = { body }
 	-- Yer yoksa sade durum satırı düşer; sorun satırı her zaman kalır.
-	local room = layout.capacity - layout.table_lines
+	local room = lay.capacity - lay.table_lines
 	for i, line in status do
 		if i > 1 or room >= #status then
 			table.insert(children, line)
@@ -953,18 +656,31 @@ local function has_data(state: State): boolean
 	return false
 end
 
+local function error_text(err: RunError, L: Strings): string
+	local f = L[err.code] or err.code
+	if err.code == "err_status" then
+		return string.format(f, err.status or -1, err.detail or "")
+	end
+	return if err.detail then string.format(f, err.detail) else f
+end
+
+local function issue_text(it: Issue, L: Strings): string
+	return if it.kind == "disabled" then string.format(L.issue_disabled, it.detail or "") else L.issue_no_report
+end
+
 -- Tablonun altındaki durum satırı; sorun varsa ikinci satır (profil hatası ya
 -- da devre dışı hesap). Dock yerine ana bölgede: dock pane'in alt kenarında kırpılıyor.
-local function status_lines(state: State, issues: { Issue }): { Node }
-	local status: { Span | string } = { ui.span(string.format("%d profil", #state.order), "muted") }
-	if state.loading then
-		table.insert(status, ui.span(" · yenileniyor…", "muted"))
+local function status_lines(state: State, issues: { Issue }, L: Strings): { Node }
+	local status: { Span | string } = { ui.span(string.format(L.profiles, #state.order), "muted") }
+	if state.loading and not state.cached then
+		table.insert(status, ui.span(L.refreshing, "muted"))
 	elseif state.fetched then
-		table.insert(status, ui.span(" · güncellendi " .. os.date("%H:%M", state.fetched), "muted"))
+		local text = string.format(L.updated, os.date("%H:%M", state.fetched))
+		table.insert(status, ui.span(if state.cached then text .. L.cached else text, "muted"))
 	end
 	-- Dar pane'de ipucu satırı kaydırmasın diye düşer.
-	if state.cx.cols >= HINT_COLS then
-		table.insert(status, ui.span(" · r: yenile", "dim"))
+	if state.cx.cols >= layout.HINT_COLS then
+		table.insert(status, ui.span(L.hint, "dim"))
 	end
 	local lines: { Node } = { with(ui.text(status), { key = "status" }) }
 
@@ -972,11 +688,16 @@ local function status_lines(state: State, issues: { Issue }): { Node }
 	for _, name in state.order do
 		local run = state.profiles[name]
 		if run and run.err then
-			table.insert(problems, name .. ": " .. run.err)
+			local text = name .. ": " .. error_text(run.err, L)
+			-- Hata önceki veriyi silmez; hangi anın verisi gösterildiğini söyle.
+			if run.data and run.at then
+				text ..= " — " .. string.format(L.stale, os.date("%H:%M", run.at))
+			end
+			table.insert(problems, text)
 		end
 	end
 	for _, it in issues do
-		table.insert(problems, provider_name(it.provider) .. " " .. it.who .. ": " .. it.text)
+		table.insert(problems, provider_name(it.provider) .. " " .. it.who .. ": " .. issue_text(it, L))
 	end
 	if #problems > 0 then
 		local text = problems[1]
@@ -986,15 +707,6 @@ local function status_lines(state: State, issues: { Issue }): { Node }
 		table.insert(lines, with(ui.text({ ui.span("⚠ " .. text, "warning") }), { key = "problem" }))
 	end
 	return lines
-end
-
-local function count_accounts(state: State): number
-	local providers = aggregate(state)
-	local n = 0
-	for _, p in providers do
-		n += #p.accounts
-	end
-	return n
 end
 
 tern.block.define("accounts", {
@@ -1009,40 +721,49 @@ tern.block.define("accounts", {
 			order = {},
 			loading = false,
 			fetched = nil,
+			cached = false,
 			timer = nil,
 			ticks = 0,
 		}
 		running[cx.pane] = state
+		load_cache(state)
 		refresh(state)
 		schedule(state)
 		return state
 	end,
 
 	title = function(state: State): string?
+		local L = strings()
 		if not has_data(state) then
-			return "omp kullanım"
+			return L.title
 		end
-		return string.format("omp kullanım · %d hesap", count_accounts(state))
+		local providers = usage.aggregate(state.order, state.profiles :: any)
+		local n = 0
+		for _, p in providers do
+			n += #p.accounts
+		end
+		return string.format(L.title_count, n)
 	end,
 
 	view = function(state: State, _cx: BlockCx): BlockView
+		local L = strings()
 		if not has_data(state) then
 			local main: Node
 			if state.loading or not state.fetched then
-				main = ui.progress(nil, "omp profillerinden kullanım alınıyor…")
+				main = ui.progress(nil, L.loading)
 			elseif #state.order == 0 then
-				main = ui.md("Hiç omp profili bulunamadı (`~/.omp/agent` ya da `~/.omp/profiles/*`). **r** ile tekrar dene.")
+				main = ui.md(L.no_profiles)
 			else
-				main = ui.md("Hiçbir profilden kullanım alınamadı; ayrıntılar aşağıda. **r** ile tekrar dene.")
+				main = ui.md(L.none_read)
 			end
 			local children: { Node } = { main }
-			for _, line in status_lines(state, {}) do
+			for _, line in status_lines(state, {}, L) do
 				table.insert(children, line)
 			end
 			return { main = ui.col(children) }
 		end
-		local providers, issues = aggregate(state)
-		return { main = ui.col(accounts_view(providers, status_lines(state, issues), state.cx)) }
+		local providers, issues = usage.aggregate(state.order, state.profiles :: any)
+		return { main = ui.col(accounts_view(providers, status_lines(state, issues, L), state.cx, L)) }
 	end,
 
 	key = function(state: State, key: Key, _cx: BlockCx): boolean?
@@ -1054,6 +775,8 @@ tern.block.define("accounts", {
 			refresh(state)
 		elseif k == "R" then
 			refresh(state, true)
+		elseif k == "l" then
+			tern.kv.set(i18n.KV_KEY, i18n.other(i18n.current(tern)))
 		else
 			return false
 		end
