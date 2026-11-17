@@ -26,8 +26,11 @@ vertical dividers, as a tiling layout must.
 
 - Automatic: when the plugin loads (for the tab on screen), when you switch to a pane or tab, and after you
   split or close a pane in this window.
-- Command palette: **Izgarayı sütunlara ayır** does it for the current tab.
+- Command palette: **Izgarayı sütunlara ayır** does it for the current tab, for any grid of at least 2×2.
 - **Bağımsız sütunlar: otomatik çevirmeyi aç/kapat** turns the automatic conversion off or on (saved).
+- **Bağımsız sütunlar: kendiliğinden çevrilecek en küçük ızgara** sets the smallest grid the automatic
+  conversion touches: 2×2 (default), 2×3, 3×2 or 3×3 (rows × panes per row; saved). Smaller grids keep
+  their rows unless you run the command above.
 
 If a move fails half way, the tab's layout is restored. Zoomed tabs are left alone.
 
@@ -38,3 +41,7 @@ tern plugin install github.com/Emirfs/tern-plugins/split-columns
 ```
 
 Requires Tern 0.9.5 or later. Window-only plugin.
+
+## Tests
+
+From the repository root: `lune run split-columns/tests/run.luau` (grid detection in `grid.luau`).

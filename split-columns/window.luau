@@ -5,83 +5,30 @@
 -- ayraç iki sütunu birden keser: sağdakini yukarı çekince soldaki de gelir.
 -- Aynı dört pane (A / C) | (B / D) olarak dizilince her sütunun kendi yatay
 -- ayracı olur. Eklenti, sekmenin ağacında her satırında aynı sayıda pane olan
--- bir ızgara (en az 2×2) bulduğu her yerde, sekmenin bir parçası olsa bile,
--- pane'leri taşıyarak onu sütunlara çevirir; programlar kapanmaz.
--- Kendiliğinden: yüklenince açık sekmede, odak değişince, pane açılınca ya da
--- kapanınca (kapatılabilir); palet komutuyla elle de çalışır.
+-- bir ızgara (varsayılan en az 2×2, ayarlanır) bulduğu her yerde, sekmenin bir
+-- parçası olsa bile, pane'leri taşıyarak onu sütunlara çevirir; programlar
+-- kapanmaz. Kendiliğinden: yüklenince açık sekmede, odak değişince, pane
+-- açılınca ya da kapanınca (kapatılabilir); palet komutuyla elle de çalışır.
+
+local grid = require("./grid")
 
 local AUTO_KEY = "auto"
+-- En küçük ızgara, { rows, cols }: bundan küçükler kendiliğinden çevrilmez.
+local MIN_KEY = "min"
 
--- `dir` yönündeki iç içe bölmeleri sırasıyla düzleştirir: (A | (B | C)) → A, B, C.
-local function chain(t: TabTree, dir: string, out: { TabTree })
-	if t.pane == nil and t.split == dir and t[1] and t[2] then
-		chain(t[1], dir, out)
-		chain(t[2], dir, out)
-	else
-		table.insert(out, t)
-	end
+local function min_size(): grid.Min
+	local ok, value = pcall(tern.kv.get, MIN_KEY)
+	return grid.parse_min(if ok then value else nil)
 end
 
--- Düğüm satırlara (`down`) bölünmüşse ve her satır aynı sayıda (≥2) yan yana
--- pane'den oluşuyorsa pane id'lerini satır satır döndürür; değilse nil.
-local function rows_grid(node: TabTree): { { number } }?
-	if node.pane ~= nil or node.split ~= "down" then
-		return nil
-	end
-	local rows: { TabTree } = {}
-	chain(node, "down", rows)
-	if #rows < 2 then
-		return nil
-	end
-	local grid: { { number } } = {}
-	local width: number? = nil
-	for i, row in rows do
-		local cells: { TabTree } = {}
-		chain(row, "right", cells)
-		if #cells < 2 or (width ~= nil and #cells ~= width) then
-			return nil
-		end
-		width = #cells
-		local ids: { number } = {}
-		for _, cell in cells do
-			local pane = cell.pane
-			if pane == nil then
-				return nil
-			end
-			table.insert(ids, pane)
-		end
-		grid[i] = ids
-	end
-	return grid
-end
-
--- Ağaçtaki bütün satır ızgaraları; bir ızgaranın içine inilmez.
-local function find_grids(node: TabTree, out: { { { number } } })
-	if node.pane ~= nil then
-		return
-	end
-	local grid = rows_grid(node)
-	if grid then
-		table.insert(out, grid)
-		return
-	end
-	if node[1] then
-		find_grids(node[1], out)
-	end
-	if node[2] then
-		find_grids(node[2], out)
-	end
-end
-
--- Sekmedeki satır ızgaralarını sütunlara çevirir. Bir taşıma başarısız olursa
--- düzen eski haline döner. Bir şey çevrildiyse true.
-local function to_columns(cx: WindowCx, tab: number): (boolean, string?)
+-- Sekmedeki en az `min` boyutundaki satır ızgaralarını sütunlara çevirir. Bir
+-- taşıma başarısız olursa düzen eski haline döner. Bir şey çevrildiyse true.
+local function to_columns(cx: WindowCx, tab: number, min: grid.Min): (boolean, string?)
 	local layout = cx.session:layout(tab)
 	if layout == nil or layout.zoomed then
 		return false, nil
 	end
-	local grids: { { { number } } } = {}
-	find_grids(layout.root, grids)
+	local grids = grid.find(layout.root, min)
 	if #grids == 0 then
 		return false, nil
 	end
@@ -90,10 +37,10 @@ local function to_columns(cx: WindowCx, tab: number): (boolean, string?)
 	-- Her satırın pane'ini bir üst satırdaki pane'in altına taşı: satır boşalınca
 	-- kapanır, her sütun kendi `down` zincirine dönüşür. Taşımalar ızgaranın
 	-- kendi yaprakları arasında kaldığı için diğer ızgaraların id'leri geçerli kalır.
-	for _, grid in grids do
-		for i = 2, #grid do
-			for j, pane in grid[i] do
-				if not cx.layout:move(pane, grid[i - 1][j], "down", keep) then
+	for _, g in grids do
+		for i = 2, #g do
+			for j, pane in g[i] do
+				if not cx.layout:move(pane, g[i - 1][j], "down", keep) then
 					cx.layout:restore(snap)
 					return false, "pane taşınamadı"
 				end
@@ -122,7 +69,7 @@ local function on_change(ev: { pane: number }, cx: WindowCx)
 	end
 	local tab = cx.session:tab_of(ev.pane) or current_tab(cx)
 	if tab then
-		local _, err = to_columns(cx, tab)
+		local _, err = to_columns(cx, tab, min_size())
 		if err then
 			cx:toast("error", "Bağımsız sütunlar: " .. err)
 		end
@@ -136,20 +83,20 @@ tern.on("pane_closed", function(_ev, cx)
 	end
 	local tab = current_tab(cx)
 	if tab then
-		to_columns(cx, tab)
+		to_columns(cx, tab, min_size())
 	end
 end)
 -- Eklentiden önce kurulmuş düzenler: geçilen sekmede ve yüklenince açık sekmede.
 tern.on("focus", function(ev, cx)
 	if auto_enabled() then
-		to_columns(cx, ev.tab)
+		to_columns(cx, ev.tab, min_size())
 	end
 end)
 tern.timer(0, function(cx)
 	if cx and auto_enabled() then
 		local tab = current_tab(cx)
 		if tab then
-			to_columns(cx, tab)
+			to_columns(cx, tab, min_size())
 		end
 	end
 end)
@@ -163,7 +110,8 @@ tern.command({
 		if tab == nil then
 			return
 		end
-		local done, err = to_columns(cx, tab)
+		-- Elle istenince ayardaki en küçük boyut değil, her ızgara (en az 2×2).
+		local done, err = to_columns(cx, tab, grid.DEFAULT_MIN)
 		if err then
 			cx:toast("error", "Bağımsız sütunlar: " .. err)
 		elseif not done then
@@ -180,5 +128,35 @@ tern.command({
 		local enabled = not auto_enabled()
 		tern.kv.set(AUTO_KEY, enabled)
 		cx:toast("info", if enabled then "Otomatik sütun düzeni açık" else "Otomatik sütun düzeni kapalı")
+	end,
+})
+
+local SIZES = { { 2, 2 }, { 2, 3 }, { 3, 2 }, { 3, 3 } }
+
+tern.command({
+	id = "min_size",
+	title = "Bağımsız sütunlar: kendiliğinden çevrilecek en küçük ızgara",
+	icon = "columns",
+	run = function(cx)
+		local now = min_size()
+		local items: { PickItem } = {}
+		for _, s in SIZES do
+			table.insert(items, {
+				label = string.format("%d satır × %d sütun", s[1], s[2]),
+				detail = if s[1] == 2 and s[2] == 2 then "varsayılan" else nil,
+				current = now.rows == s[1] and now.cols == s[2],
+				rows = s[1],
+				cols = s[2],
+			})
+		end
+		cx:pick({ items = items, placeholder = "En küçük ızgara", icon = "columns", action = "seç" }):next(function(item, _err, wcx)
+			if item == nil then
+				return
+			end
+			tern.kv.set(MIN_KEY, { rows = item.rows, cols = item.cols })
+			if wcx then
+				wcx:toast("info", "Kendiliğinden çevrilen en küçük ızgara: " .. item.label)
+			end
+		end)
 	end,
 })

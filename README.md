@@ -17,12 +17,14 @@ tern plugin install github.com/Emirfs/tern-plugins/<plugin>
 To work on a clone in place, link a plugin folder instead: `tern plugin link <clone>/<plugin>`. Tern reloads
 a linked plugin when its files change.
 
-Type-check a plugin against the API your Tern ships with
-[luau-lsp](https://github.com/JohnnyMorganz/luau-lsp/releases):
+Type-check a plugin against the API your Tern ships with, and run its tests. The tools are pinned in
+`rokit.toml` (`rokit install`), or take [luau-lsp](https://github.com/JohnnyMorganz/luau-lsp/releases) and
+[lune](https://github.com/lune-org/lune/releases) releases:
 
 ```sh
 tern plugin types .
-luau-lsp analyze --definitions=tern.d.luau <plugin>/*.luau
+luau-lsp analyze --platform=standard --definitions=@tern=tern.d.luau <plugin>/*.luau <plugin>/lib/*.luau
+lune run <plugin>/tests/run.luau   # omp-usage, split-columns
 ```
 
 ## License
