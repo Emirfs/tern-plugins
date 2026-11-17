@@ -1,0 +1,14 @@
+schema = 1
+id = "mods"
+name = "Mods"
+version = "0.1.0"
+description = "Small switchable tweaks that restyle Tern: tabs, panes, wallpaper, agent chat composer and prompts, profile colors, focus and privacy modes, plus your own CSS."
+icon = "sliders"
+host = "host.luau"
+window = "window.luau"
+
+[[blocks]]
+id = "panel"
+title = "Mods"
+icon = "sliders"
+palette = false
