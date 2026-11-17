@@ -8,6 +8,12 @@ Plugins for [Tern](https://docs.stencil.so/tern/), one installable folder each.
 | [omp-profile](omp-profile) | The omp profile each pane runs, in every split's header (with its omp extension), the tab title and the status line |
 | [split-columns](split-columns) | Turns a grid of split rows into columns, so each column's divider moves on its own |
 
+omp extension (no Tern half; installed through omp's `config.yml`, see its README):
+
+| Extension | What it does |
+| --- | --- |
+| [omp-account](omp-account) | `/hesap`: which OAuth account of the model's provider this conversation uses, shown in the status line |
+
 ## Install
 
 ```sh
