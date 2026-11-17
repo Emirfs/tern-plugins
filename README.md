@@ -12,7 +12,7 @@ omp extension (no Tern half; installed through omp's `config.yml`, see its READM
 
 | Extension | What it does |
 | --- | --- |
-| [omp-account](omp-account) | `/hesap`: which OAuth account of the model's provider this conversation uses, shown in the status line |
+| [omp-account](omp-account) | `/account`: which OAuth account of the model's provider this conversation uses, shown in the status line |
 
 ## Install
 
