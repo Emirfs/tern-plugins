@@ -2,8 +2,8 @@
  * omp extension: choose which OAuth account of the current model's provider this
  * conversation uses, and show it in the status line.
  *
- * `/hesap` lists the provider's accounts (`/hesap 2`, `/hesap inohom` pick one
- * directly; `/hesap oto` hands the choice back to omp). The choice is an explicit
+ * `/account` lists the provider's accounts (`/account 2`, `/account work` pick one
+ * directly; `/account auto` hands the choice back to omp). The choice is an explicit
  * session pin, so omp's account ranking never moves it; it is also written to the
  * session file and applied again when the session is resumed (omp restores its own
  * pin only as an automatic one, which ranking may move after an idle hour).
@@ -13,7 +13,7 @@ import type { ExtensionAPI, ExtensionContext } from "@oh-my-pi/pi-coding-agent";
 
 const ENTRY = "account-choice";
 const STATUS_KEY = "account";
-const AUTO_WORDS: Record<string, true> = { oto: true, auto: true, otomatik: true };
+const AUTO_ARG = "auto";
 
 /** The fields this extension reads from omp's `authStorage.oauth.accounts()` rows. */
 interface Account {
@@ -44,7 +44,7 @@ function accountsOf(ctx: ExtensionContext, provider: string): Account[] {
 	}
 }
 
-/** Short name for the status line: the e-mail's domain without its TLD (gmail, inohom), else the org. */
+/** Short name for the status line: the e-mail's domain without its TLD (`gmail`, `acme`), else the org. */
 function shortName(a: Account): string {
 	const domain = a.email?.split("@")[1];
 	if (domain) {
@@ -105,8 +105,8 @@ function updateStatus(ctx: ExtensionContext): void {
 	const choice = savedChoice(ctx, provider);
 	const chosen = choice && !choice.auto ? findChoice(accounts, choice) : undefined;
 	const active = chosen ?? accounts.find(a => a.active);
-	const name = active ? shortName(active) : "henüz yok";
-	ctx.ui.setStatus(STATUS_KEY, chosen ? `hesap: ${name}` : `hesap: ${name} (oto)`);
+	const name = active ? shortName(active) : "none yet";
+	ctx.ui.setStatus(STATUS_KEY, chosen ? `account: ${name}` : `account: ${name} (auto)`);
 }
 
 /** Apply the session's saved choice for the current provider again (resume, model switch, idle pin). */
@@ -122,27 +122,27 @@ function reapply(ctx: ExtensionContext): void {
 }
 
 export default function account(pi: ExtensionAPI): void {
-	pi.registerCommand("hesap", {
-		description: "Bu sohbetin hesabı: /hesap (liste), /hesap 2, /hesap inohom, /hesap oto",
+	pi.registerCommand("account", {
+		description: "Account this conversation uses: /account (list), /account 2, /account <e-mail part>, /account auto",
 		handler: async (args, ctx) => {
 			const provider = ctx.model?.provider;
 			if (!provider) {
-				ctx.ui.notify("Önce bir model seç.", "warning");
+				ctx.ui.notify("Select a model first.", "warning");
 				return;
 			}
 			const accounts = accountsOf(ctx, provider);
 			if (accounts.length === 0) {
-				ctx.ui.notify(`${provider} için kayıtlı OAuth hesabı yok; /login ile ekle.`, "warning");
+				ctx.ui.notify(`No stored OAuth accounts for ${provider}; add one with /login.`, "warning");
 				return;
 			}
 			if (!ctx.isIdle()) {
-				ctx.ui.notify("Yanıt sürerken hesap değiştirilemez; bitince tekrar dene.", "warning");
+				ctx.ui.notify("The account can't change while a reply is streaming; try again when it ends.", "warning");
 				return;
 			}
 
 			const arg = args.trim();
 			let target: Account | "auto" | undefined;
-			if (AUTO_WORDS[arg.toLowerCase()]) {
+			if (arg.toLowerCase() === AUTO_ARG) {
 				target = "auto";
 			} else if (arg) {
 				const n = Number(arg);
@@ -153,8 +153,8 @@ export default function account(pi: ExtensionAPI): void {
 				if (hits.length !== 1) {
 					ctx.ui.notify(
 						hits.length === 0
-							? `"${arg}" ile eşleşen hesap yok.`
-							: `"${arg}" birden çok hesapla eşleşiyor; numarasını yaz.`,
+							? `No account matches "${arg}".`
+							: `"${arg}" matches several accounts; use its number.`,
 						"warning",
 					);
 					return;
@@ -165,10 +165,10 @@ export default function account(pi: ExtensionAPI): void {
 				const chosen = saved && !saved.auto ? findChoice(accounts, saved) : undefined;
 				const options = accounts.map((a, i) => ({
 					label: `${i + 1}. ${longName(a)}`,
-					description: a === chosen ? "seçili" : !chosen && a.active ? "omp şu an bunu kullanıyor" : undefined,
+					description: a === chosen ? "selected" : !chosen && a.active ? "in use (picked by omp)" : undefined,
 				}));
-				options.push({ label: "Otomatik", description: chosen ? "hesabı omp seçer" : "seçili: hesabı omp seçer" });
-				const picked = await ctx.ui.select(`${provider}: bu sohbetin hesabı`, options);
+				options.push({ label: "Automatic", description: chosen ? "omp picks the account" : "selected: omp picks the account" });
+				const picked = await ctx.ui.select(`${provider}: account for this conversation`, options);
 				if (picked === undefined) return;
 				const index = options.findIndex(o => o.label === picked);
 				target = index < accounts.length ? accounts[index] : "auto";
@@ -177,10 +177,10 @@ export default function account(pi: ExtensionAPI): void {
 			if (target === "auto") {
 				ctx.modelRegistry.authStorage.sessions.release(provider, ctx.sessionManager.getSessionId());
 				pi.appendEntry<Choice>(ENTRY, { provider, auto: true });
-				ctx.ui.notify("Hesabı artık omp seçiyor.", "info");
+				ctx.ui.notify("omp picks the account again.", "info");
 			} else {
 				if (!pin(ctx, provider, target)) {
-					ctx.ui.notify(`${longName(target)} bu sohbete sabitlenemedi.`, "error");
+					ctx.ui.notify(`Could not pin ${longName(target)} to this conversation.`, "error");
 					return;
 				}
 				pi.appendEntry<Choice>(ENTRY, {
@@ -190,7 +190,7 @@ export default function account(pi: ExtensionAPI): void {
 					accountId: target.accountId,
 					orgId: target.orgId,
 				});
-				ctx.ui.notify(`Bu sohbet ${longName(target)} hesabını kullanıyor.`, "info");
+				ctx.ui.notify(`This conversation now uses ${longName(target)}.`, "info");
 			}
 			updateStatus(ctx);
 		},
