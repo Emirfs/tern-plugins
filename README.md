@@ -7,12 +7,14 @@ Plugins for [Tern](https://docs.stencil.so/tern/), one installable folder each.
 | [omp-usage](omp-usage) | Remaining usage limits of every account across all omp profiles, in one pane |
 | [omp-profile](omp-profile) | The omp profile each pane runs, in every split's header (with its omp extension), the tab title and the status line |
 | [split-columns](split-columns) | Turns a grid of split rows into columns, so each column's divider moves on its own |
+| [mods](mods) | Switchable UI mods (tab styles, profile accents, focus mode, privacy blur, live wallpaper, composer and busy animations, …) with a settings panel and your own CSS mods |
 
-omp extension (no Tern half; installed through omp's `config.yml`, see its README):
+omp extensions (no Tern half; installed through omp's `config.yml`, see their READMEs):
 
 | Extension | What it does |
 | --- | --- |
 | [omp-account](omp-account) | `/account`: which OAuth account of the model's provider this conversation uses, shown in the status line |
+| [omp-artifacts](omp-artifacts) | Claude-style artifacts: the agent's `artifact` tool saves HTML, SVG, Markdown, Mermaid or code with versions and shows it in a Tern browser pane beside the chat |
 
 ## Install
 
