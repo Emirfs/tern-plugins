@@ -251,3 +251,44 @@
 	padding-left: 12px;
 	border-left: 1px solid color-mix(in srgb, currentColor 14%, transparent);
 }
+
+/* Branch and tag chips in the message column, tinted with their commit's lane color (Fork's labels). */
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:nth-child(2) > .sf-t-key {
+	--gg-chip: #4c9aff;
+	color: var(--gg-chip);
+	background: color-mix(in srgb, var(--gg-chip) 16%, transparent);
+	border-color: color-mix(in srgb, var(--gg-chip) 55%, transparent);
+}
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:nth-child(2) > .sf-t-key.sf-t-success { --gg-chip: #36b37e; }
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:nth-child(2) > .sf-t-key.sf-t-warning { --gg-chip: #ff991f; }
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:nth-child(2) > .sf-t-key.sf-t-info { --gg-chip: #a77bf3; }
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:nth-child(2) > .sf-t-key.sf-t-error { --gg-chip: #00b8d9; }
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:nth-child(2) > .sf-t-key.sf-t-muted { --gg-chip: #f2668b; }
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:nth-child(2) > .sf-t-key.sf-t-strong {
+	font-weight: 700;
+	background: color-mix(in srgb, var(--gg-chip) 30%, transparent);
+}
+
+/* Narrow pane: the branch list becomes a wrapping strip above the commits. */
+[data-surface='plugin.git-graph.graph'] .gg-shell.gg-compact {
+	display: block;
+}
+[data-surface='plugin.git-graph.graph'] .gg-compact .gg-side {
+	position: static;
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 2px 4px;
+	max-height: 5.2em;
+	padding: 0 0 6px;
+	margin-bottom: 6px;
+	border-right: 0;
+	border-bottom: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+}
+[data-surface='plugin.git-graph.graph'] .gg-compact .gg-side-h {
+	margin: 0 2px 0 6px;
+}
+[data-surface='plugin.git-graph.graph'] .gg-compact .gg-ref {
+	padding: 0 6px;
+	border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+}

@@ -31,3 +31,10 @@ do
 	check.eq(l.wide.toolbar, true, "a malformed mode falls back to the default")
 	check.eq(layout.sanitize(nil).threshold, layout.default().threshold, "nothing stored: default")
 end
+
+-- A v1 layout (narrow panes hid the branch list) gets the strip; a v2 choice to hide it is kept
+do
+	check.eq(layout.sanitize({ narrow = { sidebar = false } }).narrow.sidebar, true, "v1 layout migrates to the strip")
+	check.eq(layout.sanitize({ v = layout.VERSION, narrow = { sidebar = false } }).narrow.sidebar, false, "v2 choice kept")
+	check.eq(layout.sanitize({ narrow = { sidebar = false } }).v, layout.VERSION, "migrated layout carries the version")
+end

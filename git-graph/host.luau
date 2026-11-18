@@ -678,13 +678,15 @@ local function lane_spans(row: lanes.Row?): { Span | string }
 	return out
 end
 
-local function ref_spans(c: parse.Commit): { Span | string }
+-- Branch and tag chips before the subject, in the commit's lane color as Fork draws them (style.css tints
+-- them in the graph's palette); the checked-out branch is bold.
+local function ref_spans(c: parse.Commit, row: lanes.Row?): { Span | string }
 	local out: { Span | string } = {}
+	local color = LANE_TOKENS[if row then row.color else 1] or "accent"
 	for _, ref in c.refs do
 		if ref.kind ~= "head" then
 			local label = if ref.kind == "tag" then "⌂ " .. ref.name elseif ref.kind == "remote" then "☁ " .. ref.name else ref.name
-			local style = if ref.current then "key accent" elseif ref.kind == "remote" then "key muted" elseif ref.kind == "tag" then "key warning" else "key"
-			table.insert(out, ui.span(label, style))
+			table.insert(out, ui.span(label, "key " .. color .. (if ref.current then " strong" else "")))
 			table.insert(out, " ")
 		end
 	end
@@ -757,7 +759,7 @@ local function commit_table(state: State, vis: layout.Parts): Node
 	local rows: { TableRow } = {}
 	local now = os.time()
 	for i, c in state.commits do
-		local msg: { Span | string } = if vis.refs then ref_spans(c) else {}
+		local msg: { Span | string } = if vis.refs then ref_spans(c, state.rows[i]) else {}
 		table.insert(msg, c.subject)
 		local cells: { Cell } = {}
 		if vis.graph then
@@ -1133,7 +1135,11 @@ tern.block.define("graph", {
 		end
 		local list = el("div", { class = "gg-list", key = "list" }, { commit_table(state, vis) })
 		table.insert(children, if vis.sidebar
-			then el("div", { class = "gg-shell", key = "shell" }, { sidebar(state), list })
+			then el("div", {
+				-- Narrow: the branch list is a strip above the commits instead of a column beside them.
+				class = if layout.mode(state.layout, cx.cols) == "narrow" then "gg-shell gg-compact" else "gg-shell",
+				key = "shell",
+			}, { sidebar(state), list })
 			else list)
 		-- The dock is an opaque region under the list: Görünüm when open, else the commit and its diff.
 		local dock: Node? = if state.settings then settings_card(state, cx.cols)

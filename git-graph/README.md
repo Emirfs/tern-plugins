@@ -19,10 +19,11 @@ Panede **Depolar** (`o`) aynı seçiciyi açar, **Sabitle / Odağı izle** (`p`)
 
 - **Grafik**: her dal kendi renginde kesintisiz bir çizgi; dolu nokta commit, halka birleşme, haleli nokta
   HEAD. Çizgileri `style.css` çizer; stil yüklenmezse aynı grafik kutu karakterleriyle (`│ ● ╮ ╯`) görünür.
-  Dal etiketleri mesajın önünde: geçerli dal vurgulu, `☁` uzak dal, `⌂` etiket. **Uzak dallar** (`u`) uzak
-  dalları da çizer. İlk 400 commit okunur, tablonun sonundaki düğme sonrakileri yükler.
-- **Sol sütun**: yerel dallar (geçerli dal `●`), her uzak depo ayrı başlık altında, etiketler; tıklayınca o
-  dalın commit'i seçilir.
+  Dal etiketleri mesajın önünde, commit'in şerit renginde (Fork gibi): geçerli dal kalın, `☁` uzak dal, `⌂`
+  etiket. **Uzak dallar** (`u`) uzak dalları da çizer. İlk 400 commit okunur, tablonun sonundaki düğme
+  sonrakileri yükler.
+- **Dallar**: yerel dallar (geçerli dal `●`), her uzak depo ayrı başlık altında, etiketler; tıklayınca o
+  dalın commit'i seçilir. Geniş panede solda sütun, dar panede listenin üstünde bir şerit.
 - **Alt bölüm**: commit seçince mesajın gövdesi, yazar, tarih, SHA, ebeveynler (tıklayınca o commit'e gider),
   mesajdaki Jira anahtarları ve değişen dosyalar; ilk dosyanın diff'i hemen sağda açılır. Başka dosyaya
   tıklamak ya da `[` `]` diff'i değiştirir. Birleşmelerde dosyalar ilk ebeveyne göredir (PR'ın getirdikleri).
@@ -39,8 +40,8 @@ Başlıktaki ayar düğmesi (`v`) **Görünüm** panelini alt bölümde açar. P
 her biri dar ve geniş için ayrı ayrı açılıp kapanır. Pane büyüyüp küçüldükçe görünüm kendiliğinden değişir.
 
 - Eşik `Eşik −10` / `Eşik +10` ile ya da **Eşik = şu anki genişlik** ile ayarlanır (varsayılan 110 sütun).
-- Varsayılan: dar panede araç çubuğu, sol sütun, yazar ve hash kapalı; geniş panede hepsi açık. Araç çubuğu
-  kapalıyken tuşlar çalışmaya devam eder.
+- Varsayılan: dar panede araç çubuğu, yazar ve hash kapalı (dallar üstte şerit); geniş panede hepsi açık. Araç
+  çubuğu kapalıyken tuşlar çalışmaya devam eder.
 - Ayar o pane'de saklanır; **Yeni paneller de böyle açılsın** onu yeni açılan panellerin varsayılanı yapar.
 
 ## Ne yazar

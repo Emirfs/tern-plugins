@@ -5,11 +5,12 @@
 local Layout = {}
 
 export type Parts = { [string]: boolean }
-export type Layout = { threshold: number, narrow: Parts, wide: Parts }
+-- `v` is the layout's version: a stored layout from an older version takes the new defaults where they changed.
+export type Layout = { v: number, threshold: number, narrow: Parts, wide: Parts }
 
 Layout.PARTS = {
 	{ id = "toolbar", label = "Araç çubuğu" },
-	{ id = "sidebar", label = "Sol sütun: dallar, uzak dallar, etiketler" },
+	{ id = "sidebar", label = "Dallar, uzak dallar, etiketler (geniş: sol sütun, dar: üstte şerit)" },
 	{ id = "graph", label = "Grafik" },
 	{ id = "refs", label = "Dal ve etiket adları" },
 	{ id = "author", label = "Yazar" },
@@ -20,10 +21,13 @@ Layout.PARTS = {
 
 Layout.MIN, Layout.MAX, Layout.STEP = 40, 300, 10
 
+Layout.VERSION = 2
+
 function Layout.default(): Layout
 	return {
+		v = Layout.VERSION,
 		threshold = 110,
-		narrow = { toolbar = false, sidebar = false, graph = true, refs = true, author = false, age = true, hash = false, detail = true },
+		narrow = { toolbar = false, sidebar = true, graph = true, refs = true, author = false, age = true, hash = false, detail = true },
 		wide = { toolbar = true, sidebar = true, graph = true, refs = true, author = true, age = true, hash = true, detail = true },
 	}
 end
@@ -47,6 +51,10 @@ function Layout.sanitize(raw: any): Layout
 				end
 			end
 		end
+	end
+	-- v1 hid the branch list in narrow panes, where it is now a strip above the commits.
+	if raw.v ~= Layout.VERSION then
+		out.narrow.sidebar = true
 	end
 	return out
 end
