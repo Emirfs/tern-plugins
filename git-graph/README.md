@@ -17,16 +17,29 @@ Panede **Depolar** (`o`) aynı seçiciyi açar, **Sabitle / Odağı izle** (`p`)
 
 ## Kullanım
 
-- **Grafik**: `◉` HEAD, `○` birleşme, `●` commit. Dal etiketleri mesajın önünde: geçerli dal vurgulu,
-  `☁` uzak dal, `⌂` etiket. **Uzak dallar** (`u`) uzak dalları da çizer. İlk 400 commit okunur, tablonun
-  sonundaki düğme sonrakileri yükler.
+- **Grafik**: her dal kendi renginde kesintisiz bir çizgi; dolu nokta commit, halka birleşme, haleli nokta
+  HEAD. Çizgileri `style.css` çizer; stil yüklenmezse aynı grafik kutu karakterleriyle (`│ ● ╮ ╯`) görünür.
+  Dal etiketleri mesajın önünde: geçerli dal vurgulu, `☁` uzak dal, `⌂` etiket. **Uzak dallar** (`u`) uzak
+  dalları da çizer. İlk 400 commit okunur, tablonun sonundaki düğme sonrakileri yükler.
 - **Ayrıntı** (alt bölüm): mesajın gövdesi, yazar, tarih, ebeveynler (tıklayınca o commit'e gider), mesajdaki
   Jira anahtarları, değişen dosyalar. Birleşmelerde dosyalar ilk ebeveyne göredir (PR'ın getirdikleri).
 - **Diff**: dosyaya çift tık ya da `enter`; `[` `]` dosyalar arasında gezer, `esc` kapatır.
 - **Sağ tık** bir commit'te: hash'i kopyala, web'de aç (GitHub/GitLab), buradan dal aç, AI'a açıklat, o
   commit'teki dallara geç, Jira kartını ve kasadaki kart notunu aç.
-- **Tuşlar**: `↑` `↓` / `j` `k` commit, `r` yenile, `f` fetch, `c` hash kopyala, `w` web, `b` dal aç, `a` AI.
+- **Tuşlar**: `↑` `↓` / `j` `k` commit, `r` yenile, `f` fetch, `c` hash kopyala, `w` web, `b` dal aç, `a` AI,
+  `v` Görünüm.
 - Pane 15 saniyede bir dalların ve HEAD'in yerine bakar; geçmişi yalnız bir şey kıpırdadıysa yeniden okur.
+
+## Görünüm: dar ve geniş pane
+
+Başlıktaki ayar düğmesi (`v`) **Görünüm** panelini açar. Pane belli bir genişliğin (sütun) altında **dar**,
+üstünde **geniş** sayılır; araç çubuğu, grafik, dal adları, yazar, zaman, hash ve ayrıntı bölümü her biri dar
+ve geniş için ayrı ayrı açılıp kapanır. Pane büyüyüp küçüldükçe görünüm kendiliğinden değişir.
+
+- Eşik `−10` / `+10` ile ya da **Şu anki genişlik eşik olsun** ile ayarlanır (varsayılan 110 sütun).
+- Varsayılan: dar panede araç çubuğu, yazar ve hash kapalı; geniş panede hepsi açık. Araç çubuğu kapalıyken
+  tuşlar çalışmaya devam eder.
+- Ayar o pane'de saklanır; **Yeni paneller de böyle açılsın** onu yeni açılan panellerin varsayılanı yapar.
 
 ## Ne yazar
 

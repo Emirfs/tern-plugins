@@ -19,6 +19,12 @@ export type Row = {
 	col: number,
 	color: number,
 	cells: { Cell },
+	-- Where the commit's node connects: its lane comes from above (a child), goes on below (a parent),
+	-- and a horizontal link leaves it to the left or right. Drawn graphics need these; glyphs imply them.
+	top: boolean,
+	bottom: boolean,
+	left: boolean,
+	right: boolean,
 }
 
 type Lane = { hash: string, color: number }
@@ -141,7 +147,17 @@ function Lanes.layout(commits: { Input }, head: string?): { Row }
 		while #cells > 0 and cells[#cells].ch == " " do
 			table.remove(cells)
 		end
-		table.insert(rows, { col = here, color = own.color, cells = cells })
+		local left, right = false, false
+		for _, j in joining do
+			left, right = left or j < here, right or j > here
+		end
+		for _, o in opened do
+			left, right = left or o.at < here, right or o.at > here
+		end
+		table.insert(rows, {
+			col = here, color = own.color, cells = cells,
+			top = col ~= nil, bottom = #c.parents > 0, left = left, right = right,
+		})
 
 		-- Advance: the commit's lane follows its first parent; joined lanes end here.
 		for _, j in joining do

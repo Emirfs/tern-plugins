@@ -1,0 +1,153 @@
+/* Commit graph pieces: each lane cell of the Grafik column is a span with `gg-*` tokens (Tern renders a token
+   `x` as class `sf-t-x`). The glyph is hidden; lines, corners and the node are drawn in the lane's color, and
+   reach past the text box into the row's padding so lanes run unbroken from row to row. */
+
+[data-surface='plugin.git-graph.graph'] .sf-t-gg {
+	--gg-w: 2px;
+	--gg-reach: -8px;
+	display: inline-block;
+	position: relative;
+	/* px, not em: the glyph is hidden with font-size 0, which would make an em height 0. */
+	height: 18px;
+	vertical-align: middle;
+	font-size: 0;
+	line-height: 0;
+}
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-s { width: 14px; }
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-g { width: 6px; }
+
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-c1 { color: #4c9aff; }
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-c2 { color: #36b37e; }
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-c3 { color: #ff8b00; }
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-c4 { color: #a77bf3; }
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-c5 { color: #00b8d9; }
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-c6 { color: #f2668b; }
+
+[data-surface='plugin.git-graph.graph'] .sf-t-gg::before,
+[data-surface='plugin.git-graph.graph'] .sf-t-gg::after {
+	content: none;
+	position: absolute;
+	box-sizing: border-box;
+}
+
+/* Straight lane, and the lane under a crossing link. */
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-v::before,
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-tr::before,
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-tl::before {
+	content: '';
+	left: calc(50% - var(--gg-w) / 2);
+	width: var(--gg-w);
+	top: var(--gg-reach);
+	bottom: var(--gg-reach);
+	background: currentColor;
+}
+
+/* Horizontal link through a gap or an empty lane. */
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-h::before {
+	content: '';
+	left: 0;
+	right: 0;
+	top: calc(50% - var(--gg-w) / 2);
+	height: var(--gg-w);
+	background: currentColor;
+}
+
+/* A lane that ends here, turning toward the commit: ╯ comes from above and goes left, ╰ goes right. */
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-jr::before,
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-jl::before {
+	content: '';
+	top: var(--gg-reach);
+	height: calc(50% - var(--gg-reach) + var(--gg-w) / 2);
+	border-bottom: var(--gg-w) solid currentColor;
+}
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-jr::before {
+	left: 0;
+	right: calc(50% - var(--gg-w) / 2);
+	border-right: var(--gg-w) solid currentColor;
+	border-bottom-right-radius: 7px;
+}
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-jl::before {
+	left: calc(50% - var(--gg-w) / 2);
+	right: 0;
+	border-left: var(--gg-w) solid currentColor;
+	border-bottom-left-radius: 7px;
+}
+
+/* A lane opened for a merge's second parent: ╮ comes from the left and goes down, ╭ from the right. */
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-or::before,
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-ol::before {
+	content: '';
+	top: calc(50% - var(--gg-w) / 2);
+	bottom: var(--gg-reach);
+	border-top: var(--gg-w) solid currentColor;
+}
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-or::before {
+	left: 0;
+	right: calc(50% - var(--gg-w) / 2);
+	border-right: var(--gg-w) solid currentColor;
+	border-top-right-radius: 7px;
+}
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-ol::before {
+	left: calc(50% - var(--gg-w) / 2);
+	right: 0;
+	border-left: var(--gg-w) solid currentColor;
+	border-top-left-radius: 7px;
+}
+
+/* An existing lane a merge links into from the side. */
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-tr::after,
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-tl::after {
+	content: '';
+	top: calc(50% - var(--gg-w) / 2);
+	height: var(--gg-w);
+	background: currentColor;
+}
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-tr::after { left: 0; right: 50%; }
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-tl::after { left: 50%; right: 0; }
+
+/* The commit: its lane above (t) and below (b), a link stub to the side (l, r), and the dot on top. */
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-n {
+	background-repeat: no-repeat;
+}
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-n.sf-t-gg-t::before,
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-n.sf-t-gg-b::before {
+	content: '';
+	left: calc(50% - var(--gg-w) / 2);
+	width: var(--gg-w);
+	background: currentColor;
+	top: 50%;
+	bottom: 50%;
+}
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-n.sf-t-gg-t::before { top: var(--gg-reach); }
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-n.sf-t-gg-b::before { bottom: var(--gg-reach); }
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-n.sf-t-gg-r {
+	background-image: linear-gradient(currentColor, currentColor);
+	background-size: 50% var(--gg-w);
+	background-position: right center;
+}
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-n.sf-t-gg-l {
+	background-image: linear-gradient(currentColor, currentColor);
+	background-size: 50% var(--gg-w);
+	background-position: left center;
+}
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-n::after {
+	content: '';
+	width: 9px;
+	height: 9px;
+	left: calc(50% - 4.5px);
+	top: calc(50% - 4.5px);
+	border-radius: 50%;
+	background: currentColor;
+}
+/* A merge is a ring, HEAD a dot with a halo. */
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-n.sf-t-gg-merge::after {
+	background: var(--panel, #16181a);
+	border: var(--gg-w) solid currentColor;
+}
+[data-surface='plugin.git-graph.graph'] .sf-t-gg-n.sf-t-gg-head::after {
+	width: 11px;
+	height: 11px;
+	left: calc(50% - 5.5px);
+	top: calc(50% - 5.5px);
+	box-shadow: 0 0 0 2px var(--panel, #16181a), 0 0 0 3.5px currentColor;
+}

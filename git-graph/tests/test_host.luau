@@ -170,6 +170,25 @@ local ok, err = pcall(function()
 	block.key(state, { name = "escape", ctrl = false, alt = false, meta = false, shift = false }, cx)
 	check.eq(block.view(state, cx).layer, nil, "escape closes the diff")
 
+	-- Narrow pane: author, hash and toolbar hidden by default; Görünüm toggles a part and survives a save
+	cx.cols = 60
+	local narrow = text(block.view(state, cx).main)
+	check.eq(has(narrow, "Test"), false, "author column hidden when narrow")
+	check.eq(has(narrow, "Depolar"), false, "toolbar hidden when narrow")
+	check.truthy(has(narrow, "FRMWR-397: second line"), "subjects still shown")
+	block.key(state, { name = "v", text = "v", ctrl = false, alt = false, meta = false, shift = false }, cx)
+	check.truthy(has(text(block.view(state, cx).layer), "Dar pane"), "v opens the Görünüm panel")
+	block.event(state, { ev = "action", id = "parts", act = "layout", value = "narrow:author", item = "author" }, cx)
+	check.truthy(has(text(block.view(state, cx).main), "Test"), "author turned on for narrow panes")
+	block.event(state, { ev = "action", act = "threshold", value = "here" }, cx)
+	check.eq(state.layout.threshold, 60, "threshold set to the current width")
+	check.eq(block.save(state).layout.narrow.author, true, "layout saved with the pane")
+	block.event(state, { ev = "action", act = "layout-default" }, cx)
+	check.eq(kv["layout-default"].narrow.author, true, "made the default for new panes")
+	block.key(state, { name = "escape", ctrl = false, alt = false, meta = false, shift = false }, cx)
+	check.eq(state.settings, false, "escape closes Görünüm")
+	cx.cols = 120
+
 	-- Menu: copy, Jira link and a switch to `side` that waits for the window's confirm
 	local first = state.commits[1]
 	local second = state.commits[2]

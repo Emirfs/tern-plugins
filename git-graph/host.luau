@@ -8,6 +8,7 @@
 -- through kv `ask` and reads the reply from kv `answer:<pane>`.
 
 local lanes = require("./lib/lanes")
+local layout = require("./lib/layout")
 local parse = require("./lib/parse")
 local repos = require("./lib/repos")
 
@@ -21,7 +22,6 @@ local FETCH_TIMEOUT_MS = 180000
 local AI_TIMEOUT_MS = 120000
 local MAX_DIFF = 400000
 local MAX_AI_INPUT = 12000
-local COLOR_TOKENS = { "accent", "success", "warning", "info", "error", "muted" }
 
 local ACT_COPY = "Hash'i kopyala"
 local ACT_WEB = "Web'de aç"
@@ -71,6 +71,9 @@ type State = {
 	asks: { [string]: Ask },
 	-- Bumped on every repo change: answers from git about an older repo are dropped.
 	gen: number,
+	-- What shows narrow and wide (Görünüm) and whether its panel is open.
+	layout: layout.Layout,
+	settings: boolean,
 }
 
 local function home(): string
@@ -601,14 +604,39 @@ end
 
 -- ---------------------------------------------------------------- view
 
+-- Glyph → drawn piece. style.css draws each piece (lines, corners, the node) in the span's color and hides the
+-- glyph; without the stylesheet the glyphs themselves still read as a `git log --graph`.
+local PIECE: { [string]: string } = {
+	["│"] = "v", ["┼"] = "v", ["─"] = "h", ["╯"] = "jr", ["╰"] = "jl", ["╮"] = "or", ["╭"] = "ol",
+	["┤"] = "tr", ["├"] = "tl", ["●"] = "n", ["○"] = "n", ["◉"] = "n",
+}
+
 local function lane_spans(row: lanes.Row?): { Span | string }
 	local out: { Span | string } = {}
 	if row == nil then
 		return out
 	end
-	for _, run in lanes.runs(row) do
-		local text, color = run[1] :: string, run[2] :: number
-		table.insert(out, if color == 0 then text else ui.span(text, "mono " .. COLOR_TOKENS[color]))
+	for i, cell in row.cells do
+		local tokens = { "gg", if i % 2 == 1 then "gg-s" else "gg-g" }
+		local piece = PIECE[cell.ch]
+		if piece then
+			table.insert(tokens, "gg-" .. piece)
+			table.insert(tokens, `gg-c{cell.color}`)
+		end
+		if piece == "n" then
+			local flags: { { any } } = { { "t", row.top }, { "b", row.bottom }, { "l", row.left }, { "r", row.right } }
+			for _, f in flags do
+				if f[2] then
+					table.insert(tokens, "gg-" .. (f[1] :: string))
+				end
+			end
+			if cell.ch == "○" then
+				table.insert(tokens, "gg-merge")
+			elseif cell.ch == "◉" then
+				table.insert(tokens, "gg-head")
+			end
+		end
+		table.insert(out, ui.span(if cell.ch == " " then "\u{00A0}" else cell.ch, table.concat(tokens, " ")))
 	end
 	return out
 end
@@ -653,7 +681,10 @@ local function header(state: State): Node
 	elseif state.fetched then
 		table.insert(spans, ui.span(" · " .. os.date("%H:%M", state.fetched), "muted"))
 	end
-	return with(ui.text(spans), { key = "head" })
+	return with(ui.row({
+		ui.text(spans),
+		ui.button("", { icon = "sliders", keys = { "v" }, title = "Görünüm: dar ve geniş panede ne görünsün", size = "sm", variant = "quiet", on = state.settings, actions = { click = "settings" } }),
+	}), { key = "head" })
 end
 
 local function toolbar(state: State): Node
@@ -670,34 +701,91 @@ local function toolbar(state: State): Node
 	return with(ui.row(buttons), { key = "toolbar" })
 end
 
-local function commit_table(state: State): Node
+local function commit_table(state: State, vis: layout.Parts): Node
+	local cols: { Col } = {}
+	if vis.graph then
+		table.insert(cols, { id = "graph", head = "", mono = true })
+	end
+	table.insert(cols, { id = "msg", head = "Mesaj", grow = 1 })
+	if vis.author then
+		table.insert(cols, { id = "author", head = "Yazar", priority = -1 })
+	end
+	if vis.age then
+		table.insert(cols, { id = "age", head = "Zaman", align = "end", priority = -2 })
+	end
+	if vis.hash then
+		table.insert(cols, { id = "hash", head = "Hash", mono = true, priority = -3 })
+	end
+
 	local rows: { TableRow } = {}
 	local now = os.time()
 	for i, c in state.commits do
-		local msg: { Span | string } = ref_spans(c)
+		local msg: { Span | string } = if vis.refs then ref_spans(c) else {}
 		table.insert(msg, c.subject)
-		table.insert(rows, {
-			id = c.hash,
-			menu = commit_menu(state, c),
-			cells = { lane_spans(state.rows[i]), msg, c.author, ui.span(parse.age(c.time, now), "muted"), ui.span(c.short, "muted") },
-		})
+		local cells: { Cell } = {}
+		if vis.graph then
+			table.insert(cells, lane_spans(state.rows[i]))
+		end
+		table.insert(cells, msg)
+		if vis.author then
+			table.insert(cells, c.author)
+		end
+		if vis.age then
+			table.insert(cells, ui.span(parse.age(c.time, now), "muted"))
+		end
+		if vis.hash then
+			table.insert(cells, ui.span(c.short, "muted"))
+		end
+		table.insert(rows, { id = c.hash, menu = commit_menu(state, c), cells = cells })
 	end
 	if state.more then
-		table.insert(rows, {
-			id = "more",
-			cells = { "", { button = { text = `{PAGE} commit daha`, act = "more", icon = "chevron-down" } }, "", "", "" },
-		})
+		local cells: { Cell } = {}
+		for _, col in cols do
+			table.insert(cells, if col.id == "msg" then { button = { text = `{PAGE} commit daha`, act = "more", icon = "chevron-down" } } else "")
+		end
+		table.insert(rows, { id = "more", cells = cells })
 	end
 	local empty = if state.repo == nil then "Bir terminale odaklan ya da Depolar'dan seç."
 		elseif state.loading then "Geçmiş okunuyor…"
 		else "Bu depoda commit yok."
-	return with(ui.table({
-		{ id = "graph", head = "Grafik", mono = true },
-		{ id = "msg", head = "Mesaj", grow = 1 },
-		{ id = "author", head = "Yazar", priority = -1 },
-		{ id = "age", head = "Zaman", align = "end", priority = -2 },
-		{ id = "hash", head = "Hash", mono = true, priority = -3 },
-	}, rows, { selectable = true, selected = state.selected, empty = empty }), { key = "commits" })
+	return with(ui.table(cols, rows, { selectable = true, selected = state.selected, empty = empty }), { key = "commits", role = "git-graph.commits" })
+end
+
+-- Görünüm: which parts show when the pane is narrow and when wide, and where narrow ends.
+local function settings_layer(state: State, cols: number): Node
+	local l = state.layout
+	local mode = layout.mode(l, cols)
+	local rows: { TableRow } = {}
+	for _, part in layout.PARTS do
+		local function toggle(which: string): Cell
+			local on = (l :: any)[which][part.id] == true
+			return { button = { text = if on then "Açık" else "Kapalı", act = `layout={which}:{part.id}`, variant = if on then "primary" else "default" } }
+		end
+		table.insert(rows, { id = part.id, cells = { part.label, toggle("narrow"), toggle("wide") } })
+	end
+	local children: { Node } = {
+		ui.text({
+			ui.span(`Pane şu an {cols} sütun: `, "muted"),
+			ui.span(if mode == "narrow" then "dar" else "geniş", "strong"),
+			ui.span(` · {l.threshold} sütunun altı dar sayılır`, "muted"),
+		}),
+		with(ui.row({
+			ui.button(`−{layout.STEP}`, { size = "sm", disabled = l.threshold <= layout.MIN, actions = { click = "threshold=-1" } }),
+			ui.button(`+{layout.STEP}`, { size = "sm", disabled = l.threshold >= layout.MAX, actions = { click = "threshold=1" } }),
+			ui.button("Şu anki genişlik eşik olsun", { size = "sm", variant = "quiet", actions = { click = "threshold=here" } }),
+		}), { key = "threshold" }),
+		with(ui.table({
+			{ id = "part", head = "Bölüm", grow = 1 },
+			{ id = "narrow", head = "Dar pane", align = "center" },
+			{ id = "wide", head = "Geniş pane", align = "center" },
+		}, rows), { key = "parts" }),
+		with(ui.row({
+			ui.button("Yeni paneller de böyle açılsın", { icon = "check", size = "sm", actions = { click = "layout-default" } }),
+			ui.button("Varsayılana dön", { size = "sm", variant = "quiet", actions = { click = "layout-reset" } }),
+			ui.button("Kapat", { keys = { "esc" }, size = "sm", actions = { click = "settings" } }),
+		}), { key = "actions" }),
+	}
+	return ui.col({ with(ui.card("Görünüm", children, { icon = "sliders" }), { key = "settings" }) })
 end
 
 local STATUS_TONE: { [string]: string } = { A = "success", D = "error", M = "warning", R = "info", C = "info", T = "muted" }
@@ -837,8 +925,25 @@ local function on_action(state: State, act: string, item: string?, window: strin
 	elseif name == "jira" and value then
 		state.cx:open(`{state.cfg.jira_url}/browse/{value}`, if window then { window = window } else nil)
 		return
+	elseif name == "layout" and value then
+		local mode, part = string.match(value, "^(%a+):(%a+)$")
+		if mode and part then
+			layout.toggle(state.layout, mode, part)
+		end
+		return
+	elseif name == "threshold" and value then
+		local t = if value == "here" then state.cx.cols else state.layout.threshold + (tonumber(value) or 0) * layout.STEP
+		state.layout.threshold = math.clamp(t, layout.MIN, layout.MAX)
+		return
 	end
-	if act == "repos" then
+	if act == "settings" then
+		state.settings = not state.settings
+	elseif act == "layout-default" then
+		tern.kv.set("layout-default", state.layout)
+		state.cx:toast("success", "Yeni Git grafiği panelleri bu görünümle açılacak")
+	elseif act == "layout-reset" then
+		state.layout = layout.default()
+	elseif act == "repos" then
 		pick_repo(state, window)
 	elseif act == "pin" then
 		toggle_pin(state)
@@ -884,6 +989,8 @@ tern.block.define("graph", {
 			status = nil, sig = nil, head = nil, web = nil, fetched = nil,
 			selected = if type(s.selected) == "string" then s.selected else nil,
 			details = {}, file = 1, diff = nil, ai = {}, ai_busy = {}, busy = nil, asks = {}, gen = 0,
+			layout = layout.sanitize(if type(s.layout) == "table" then s.layout else tern.kv.get("layout-default")),
+			settings = false,
 		}
 		if args[1] == "--pick" then
 			pick_repo(state, nil)
@@ -913,25 +1020,32 @@ tern.block.define("graph", {
 		return `Git · {parse.base(state.repo)}{branch}`
 	end,
 
-	view = function(state: State, _cx: BlockCx): BlockView
-		local children: { Node } = { header(state), toolbar(state) }
+	view = function(state: State, cx: BlockCx): BlockView
+		local vis = layout.visible(state.layout, cx.cols)
+		local children: { Node } = { header(state) }
+		if vis.toolbar then
+			table.insert(children, toolbar(state))
+		end
 		if state.note then
 			table.insert(children, with(ui.text({ ui.span(state.note, "muted") }), { key = "note" }))
 		end
 		if state.err then
 			table.insert(children, with(ui.text({ ui.span("⚠ " .. state.err, "warning") }), { key = "err" }))
 		end
-		table.insert(children, commit_table(state))
-		local detail = detail_card(state)
+		table.insert(children, commit_table(state, vis))
+		local detail = if vis.detail then detail_card(state) else nil
 		return {
 			main = ui.col(children),
 			dock = if detail then ui.col({ detail }) else nil,
-			layer = diff_layer(state),
+			layer = if state.settings then settings_layer(state, cx.cols) else diff_layer(state),
 		}
 	end,
 
 	save = function(state: State): any
-		return { repo = state.repo, follow = state.follow, remotes = state.remotes, selected = state.selected }
+		return {
+			repo = state.repo, follow = state.follow, remotes = state.remotes, selected = state.selected,
+			layout = state.layout,
+		}
 	end,
 
 	event = function(state: State, ev: UiEvent, _cx: BlockCx)
@@ -966,10 +1080,15 @@ tern.block.define("graph", {
 		end
 		local k = key.text or key.name
 		if k == "escape" or key.name == "escape" or key.name == "esc" then
-			if state.diff == nil then
+			if state.settings then
+				state.settings = false
+			elseif state.diff then
+				state.diff = nil
+			else
 				return false
 			end
-			state.diff = nil
+		elseif k == "v" then
+			state.settings = not state.settings
 		elseif key.name == "down" or k == "j" then
 			move(state, 1)
 		elseif key.name == "up" or k == "k" then
