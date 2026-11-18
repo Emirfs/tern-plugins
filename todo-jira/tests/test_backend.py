@@ -1,11 +1,13 @@
+import json
+import os
 import pathlib
-import sqlite3
 import sys
 import tempfile
 import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
-from backend import Jira, UserError, memory_drafts
+import vault
+from backend import Jira, UserError, adf_markdown, adf_plain, md_to_adf
 
 
 class IssueServer(Jira):
@@ -13,7 +15,7 @@ class IssueServer(Jira):
         self.owner = "emir"
         self.title = "Eski başlık"
         self.status = {"id": "3", "name": "In Progress", "statusCategory": {"key": "indeterminate"}}
-        self.comments = []
+        self.stored = []
 
     def api(self, path, *, method="GET", body=None):
         if path == "/myself":
@@ -33,13 +35,17 @@ class IssueServer(Jira):
             self.title = body["fields"]["summary"]
             return None
         if path.startswith("/issue/TASK-15/comment?"):
-            return {"total": len(self.comments), "comments": self.comments}
+            return {"total": len(self.stored), "comments": self.stored}
         if path == "/issue/TASK-15/comment" and method == "POST":
-            comment = {"id": str(len(self.comments) + 1), "body": body["body"]}
-            self.comments.append(comment)
+            # Jira stores ADF with attrs it adds itself (paragraph localId), so a read never equals the request.
+            doc = json.loads(json.dumps(body["body"]))
+            for block in doc["content"]:
+                block["attrs"] = {"localId": f"p{len(self.stored)}"}
+            comment = {"id": str(len(self.stored) + 1), "body": doc}
+            self.stored.append(comment)
             return comment
         if path.startswith("/issue/TASK-15/comment/"):
-            return self.comments[int(path.rsplit("/", 1)[-1]) - 1]
+            return self.stored[int(path.rsplit("/", 1)[-1]) - 1]
         raise AssertionError((method, path, body))
 
 
@@ -70,26 +76,88 @@ class JiraWriteTests(unittest.TestCase):
         jira = IssueServer()
         payload = dict(self.issue, text="Güç kaybı senaryosu doğrulandı.")
         self.assertEqual(jira.comment(payload), jira.comment(payload))
-        self.assertEqual([c["body"]["content"][0]["content"][0]["text"] for c in jira.comments], [payload["text"]])
+        self.assertEqual([c["body"]["content"][0]["content"][0]["text"] for c in jira.stored], [payload["text"]])
 
 
-class MemoryTests(unittest.TestCase):
-    def test_only_latest_verified_unambiguous_card_summary_is_proposed(self):
-        with tempfile.TemporaryDirectory() as directory:
-            path = pathlib.Path(directory, "index.sqlite")
-            with sqlite3.connect(path) as db:
-                db.execute("CREATE TABLE notes(id, title, summary, status, verification, type, updated, created)")
-                rows = [
-                    (1, "TASK-150 farklı kart", "Yanlış hedef", "active", "verified", "note", "2026-11-18", ""),
-                    (2, "TASK-15", "Doğrulanmadı", "active", "reported", "note", "2026-11-18", ""),
-                    (3, "TASK-15", "Eski öneri", "active", "verified", "lesson", "2026-11-14", ""),
-                    (4, "TASK-15", "Kurtarma senaryosu geçti.", "active", "verified", "lesson", "2026-11-16", ""),
-                    (5, "TASK-15 ve TASK-16", "Karışık iş özeti", "active", "verified", "note", "2026-11-17", ""),
-                    (6, "TASK-15", "Yürürlükten kalktı", "superseded", "verified", "note", "2026-11-18", ""),
-                ]
-                db.executemany("INSERT INTO notes VALUES (?, ?, ?, ?, ?, ?, ?, ?)", rows)
-            db.close()
-            issues = [{"key": "TASK-15", "id": "10015"}, {"key": "TASK-16", "id": "10016"}]
-            drafts = memory_drafts(issues, {}, path)
-            self.assertEqual([(d["key"], d["text"]) for d in drafts], [("TASK-15", "Kurtarma senaryosu geçti.")])
-            self.assertEqual(memory_drafts(issues, {"TASK-15": drafts[0]["digest"]}, path), [])
+class AdfTests(unittest.TestCase):
+    def test_comment_structure_survives_as_markdown(self):
+        text = lambda t, *marks: {"type": "text", "text": t, "marks": list(marks)}
+        doc = {"type": "doc", "version": 1, "content": [
+            {"type": "heading", "attrs": {"level": 3, "localId": "h"}, "content": [text("Kök neden")]},
+            {"type": "bulletList", "content": [
+                {"type": "listItem", "content": [{"type": "paragraph", "content": [text("ST-LINK", {"type": "strong"}), text(" takılıyor")]}]},
+                {"type": "listItem", "content": [{"type": "paragraph", "content": [
+                    text("rapor", {"type": "link", "attrs": {"href": "https://example.com/r"}})]}]},
+            ]},
+            {"type": "table", "content": [
+                {"type": "tableRow", "content": [{"type": "tableHeader", "content": [{"type": "paragraph", "content": [text("Kod")]}]},
+                                                 {"type": "tableHeader", "content": [{"type": "paragraph", "content": [text("Anlam")]}]}]},
+                {"type": "tableRow", "content": [{"type": "tableCell", "content": [{"type": "paragraph", "content": [text("STM-C01")]}]},
+                                                 {"type": "tableCell", "content": [{"type": "paragraph", "content": [text("a|b")]}]}]},
+            ]},
+            {"type": "mediaSingle", "content": [{"type": "media", "attrs": {"id": "x"}}]},
+        ]}
+        self.assertEqual(adf_markdown(doc), "\n\n".join([
+            "### Kök neden",
+            "- **ST-LINK** takılıyor\n- [rapor](https://example.com/r)",
+            "| Kod | Anlam |\n| --- | --- |\n| STM-C01 | a\\|b |",
+            "*[ek]*",
+        ]))
+        self.assertEqual(adf_plain(doc).splitlines()[0], "Kök neden")
+
+
+class VaultTests(unittest.TestCase):
+    issue = dict(key="TASK-15", id="10015", title="Kurtarma", status_name="Devam", lane="Doing",
+                 url="https://x.atlassian.net/browse/TASK-15", updated="2026-11-18 10:00",
+                 comments=[dict(id="7", mine=True, created="2026-11-10 09:00", text="### İlk rapor\n\nayrıntı",
+                                url="https://x.atlassian.net/browse/TASK-15?focusedCommentId=7"),
+                           dict(id="8", mine=False, created="2026-11-11 09:00", text="başkası", url="u")])
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        os.environ["TERN_HAFIZA_DIR"] = self.dir.name
+
+    def tearDown(self):
+        del os.environ["TERN_HAFIZA_DIR"]
+        self.dir.cleanup()
+
+    def test_user_sections_survive_and_jira_owned_parts_follow_jira(self):
+        vault.sync([dict(self.issue)])
+        path = vault.note_path("TASK-15")
+        text = path.read_text(encoding="utf-8")
+        self.assertIn("[7](https://x.atlassian.net/browse/TASK-15?focusedCommentId=7) · İlk rapor", text)
+        self.assertNotIn("başkası", text)
+        edited = text.replace("## Log\n", "## Log\n\n- 2026-11-12 · elle yazılan satır\n")
+        edited = edited.replace("---\n", "---\nowner: emir\n", 1).replace("title: Kurtarma", "title: eski")
+        path.write_text(edited, encoding="utf-8")
+        moved = dict(self.issue, title="Kurtarma testi", comments=[])
+        drafts, written = vault.sync([moved])
+        after = path.read_text(encoding="utf-8")
+        self.assertEqual((drafts, written), ([], [path]))
+        self.assertIn("- 2026-11-12 · elle yazılan satır", after)
+        self.assertIn("owner: emir", after)
+        self.assertIn("title: Kurtarma testi", after)
+        self.assertNotIn("title: eski", after)
+        self.assertNotIn("İlk rapor", after)
+        self.assertEqual(vault.sync([moved])[1], [])
+
+    def test_draft_is_offered_once_filled_and_cleared_only_if_unchanged(self):
+        vault.sync([dict(self.issue)])
+        path = vault.note_path("TASK-15")
+        draft = "Kurtarma senaryosu geçti.\n\n- güç kaybı denendi"
+        text = path.read_text(encoding="utf-8")
+        path.write_text(text.replace("## Jira draft\n", f"## Jira draft\n\n{draft}\n"), encoding="utf-8")
+        drafts, _ = vault.sync([dict(self.issue)])
+        self.assertEqual([d["text"] for d in drafts], [draft])
+        vault.clear_draft("TASK-15", "başka metin")
+        self.assertEqual(len(vault.sync([dict(self.issue)])[0]), 1)
+        vault.clear_draft("TASK-15", draft)
+        self.assertEqual(vault.sync([dict(self.issue)])[0], [])
+
+    def test_markdown_draft_compares_equal_after_jira_adds_attrs(self):
+        adf = md_to_adf("**Sonuç** geçti\nikinci satır\n\n- a\n- b\n\n```c\nx = 1;\n```")
+        self.assertEqual([b["type"] for b in adf["content"]], ["paragraph", "bulletList", "codeBlock"])
+        stored = json.loads(json.dumps(adf))
+        for block in stored["content"]:
+            block["attrs"] = dict(block.get("attrs") or {}, localId="z")
+        self.assertEqual(adf_plain(stored), adf_plain(adf))

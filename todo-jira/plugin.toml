@@ -1,6 +1,11 @@
 schema = 1
 id = "todo-jira"
 name = "Todo · Jira"
-version = "0.1.0"
-description = "Tern'in mevcut TODO.md panosunda Jira kartları, Hermes görevleri ve özel hafıza önizlemeleri."
+version = "0.2.0"
+description = "Tern'in mevcut TODO.md panosunda Jira kartları, kart yorumları paneli, Hermes görevleri ve özel hafıza önizlemeleri."
+host = "host.luau"
 window = "window.luau"
+
+[[blocks]]
+id = "board"
+title = "Jira"

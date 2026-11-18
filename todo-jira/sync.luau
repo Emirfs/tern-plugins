@@ -64,7 +64,12 @@ function Sync.plan(issues: { Issue }, cards: { Card }, base: { [string]: Issue }
 			continue -- Local removal never deletes or updates a Jira issue.
 		end
 		if not previous and (card.title ~= remote.title or card.due ~= remote.due or card.lane ~= remote.lane) then
-			table.insert(conflicts, `{key}: bu anahtar panoda zaten var; içeriği Jira ile eşleşmiyor.`)
+			-- Eşitleme geçmişi olmayan kart: hangisinin doğru olduğu bilinmez, farkı alan alan söyle.
+			local diffs: { string } = {}
+			if card.title ~= remote.title then table.insert(diffs, `başlık “{card.title}” / “{remote.title}”`) end
+			if card.due ~= remote.due then table.insert(diffs, `termin “{card.due}” / “{remote.due}”`) end
+			if card.lane ~= remote.lane then table.insert(diffs, `sütun “{card.lane}” / “{remote.lane}”`) end
+			table.insert(conflicts, `{key}: panoda eşitlenmemiş kart (pano / Jira): {table.concat(diffs, ", ")}. Panoyu Jira’ya eşitleyin ya da kartı silip yenileyin.`)
 			continue
 		end
 		local nextBase = table.clone(previous or remote)
@@ -91,7 +96,8 @@ function Sync.plan(issues: { Issue }, cards: { Card }, base: { [string]: Issue }
 				local remoteValue = if field == "status" then remote.status_name else target
 				table.insert(conflicts, `{key} · {label}: panoda “{value}”, Jira’da “{remoteValue}”.`)
 			elseif field ~= "status" or value == "Todo" or value == "Doing" or value == "Done" then
-				table.insert(changes, {issue = remote, card = card, field = field, before = (remote :: any)[field], value = value})
+				local change: Change = {issue = remote, card = card, field = field :: string, before = (remote :: any)[field], value = value :: string}
+				table.insert(changes, change)
 			end
 		end
 		if edit.title ~= nil or edit.due ~= nil or edit.lane ~= nil then
