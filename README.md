@@ -33,6 +33,11 @@ The same fork also supports a separate **ESP** workspace with one live Hermes ta
 Account names and local paths are redacted. The wallpaper is a personal [Backdrop](https://github.com/avcton/tern-backdrop)
 configuration; these plugins do not install the wallpaper or recreate the tabs.
 
+## Example mods
+
+Browse the [mod gallery](examples) for three small styles with real Tern previews and install recipes:
+Signal Tabs, Split Compass and Reading Measure. Try them independently as plugins or as CSS files in Mods.
+
 ## Install
 
 ```sh

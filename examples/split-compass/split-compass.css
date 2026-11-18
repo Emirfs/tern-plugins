@@ -1,0 +1,6 @@
+/* title: Split Compass */
+/* Skip single panes and leave the split geometry, terminal body and focus controls alone. */
+.tn-stage .tn-pane.multi.on.headed > .tn-head {
+  background: rgb(from var(--accent) r g b / 18%) !important;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}

@@ -79,6 +79,8 @@ default. A leading comment names it:
 
 Without it the file name is the title. The CSS is applied as is; edits show within two seconds.
 
+The [example gallery](../examples) has three ready-to-copy CSS files with screenshots and recipes.
+
 ## How it works
 
 Settings live in the plugin's `tern.kv` (`on`, `cfg`, `look`, `lang`), shared by both halves and every

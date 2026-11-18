@@ -1,0 +1,6 @@
+schema = 1
+id = "reading-measure"
+name = "Reading Measure"
+version = "0.1.0"
+description = "Keeps Reader chat prose narrow while leaving code and tables at their native width."
+window = "window.luau"

@@ -1,0 +1,6 @@
+schema = 1
+id = "signal-tabs"
+name = "Signal Tabs"
+version = "0.1.0"
+description = "Distinguishes working, waiting and failed tabs with steady title underlines."
+window = "window.luau"

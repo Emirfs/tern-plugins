@@ -1,0 +1,27 @@
+/* title: Signal Tabs */
+/* Keep Tern's attention badges and selected-tab treatment. Failed > waiting > working. */
+#tabbar .tt .nm {
+  position: relative;
+}
+
+#tabbar .tt:is(.working, :has([data-st="waiting"]), :has([data-st="failed"])) .nm::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  pointer-events: none;
+}
+
+#tabbar .tt.working .nm::after {
+  background-image: repeating-linear-gradient(90deg, var(--accent) 0px, var(--accent) 2px, transparent 2px, transparent 4px);
+}
+
+#tabbar .tt:has([data-st="waiting"]) .nm::after {
+  background-image: repeating-linear-gradient(90deg, var(--warn) 0px, var(--warn) 5px, transparent 5px, transparent 8px);
+}
+
+#tabbar .tt:has([data-st="failed"]) .nm::after {
+  background-image: linear-gradient(var(--bad), var(--bad));
+}

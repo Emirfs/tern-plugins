@@ -1,0 +1,5 @@
+/* title: Reading Measure */
+/* Scope to Reader chat prose; code, data tables and attachments keep Tern's native measure. */
+.sf-main.sf-chat-reader .sf-md > .md > :is(p, ul, ol, blockquote, h1, h2, h3, h4, h5, h6) {
+  max-width: 72ch;
+}

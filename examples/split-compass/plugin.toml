@@ -1,0 +1,6 @@
+schema = 1
+id = "split-compass"
+name = "Split Compass"
+version = "0.1.0"
+description = "Marks the active pane header in a split without dimming the other panes."
+window = "window.luau"
