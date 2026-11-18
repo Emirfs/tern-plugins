@@ -1,0 +1,6 @@
+schema = 1
+id = "todo-jira"
+name = "Todo · Jira"
+version = "0.1.0"
+description = "Tern'in mevcut TODO.md panosunda Jira kartları, Hermes görevleri ve özel hafıza önizlemeleri."
+window = "window.luau"
