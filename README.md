@@ -11,6 +11,7 @@ Plugins for [Tern](https://docs.stencil.so/tern/), one installable folder each.
 | [hermes-bridge](hermes-bridge) | Connects Carly, Hermes and omp, with a shortcut to open a live Hermes tab for each field device |
 | [todo-jira](todo-jira) | Assigned Jira issues in Tern’s Markdown TODO board, a Jira pane with every comment, reviewed edits, Hermes Kanban handoff and Jira comment drafts from the memory vault |
 | [hafiza](hafiza) | The shared memory vault's inbox (accept or reject what agents propose) and today's note |
+| [git-graph](git-graph) | A repository's commit graph with one colored lane per branch, commit details and file diffs; follows the focused terminal's repo or stays pinned, picks among every repo under a folder, and offers safe branch switching, branch creation, fetch and a short AI explanation |
 
 omp extensions (no Tern half; installed through omp's `config.yml`, see their READMEs):
 
@@ -56,7 +57,7 @@ Type-check a plugin against the API your Tern ships with, and run its tests. The
 ```sh
 tern plugin types .
 luau-lsp analyze --platform=standard --definitions=@tern=tern.d.luau <plugin>/*.luau <plugin>/lib/*.luau
-lune run <plugin>/tests/run.luau   # omp-usage, split-columns
+lune run <plugin>/tests/run.luau   # omp-usage, split-columns, git-graph
 ```
 
 ## License

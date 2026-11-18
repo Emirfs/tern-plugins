@@ -1,0 +1,11 @@
+schema = 1
+id = "git-graph"
+name = "Git grafiği"
+version = "0.1.0"
+description = "Depo commit grafiği: her dal kendi renkli şeridinde, commit ayrıntısı ve dosya diff'i, odaktaki terminalin deposunu izler ya da sabitlenir; dala geç, dal aç, fetch, AI açıklaması ve Jira/hafıza bağlantıları."
+host = "host.luau"
+window = "window.luau"
+
+[[blocks]]
+id = "graph"
+title = "Git grafiği"
