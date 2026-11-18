@@ -8,6 +8,7 @@ Plugins for [Tern](https://docs.stencil.so/tern/), one installable folder each.
 | [omp-profile](omp-profile) | The omp profile each pane runs, in every split's header (with its omp extension), the tab title and the status line |
 | [split-columns](split-columns) | Turns a grid of split rows into columns, so each column's divider moves on its own |
 | [mods](mods) | Switchable UI mods (tab styles, profile accents, focus mode, privacy blur, live wallpaper, composer and busy animations, …) with a settings panel and your own CSS mods |
+| [hermes-bridge](hermes-bridge) | Connects Carly, Hermes and omp, with a shortcut to open a live Hermes tab for each field device |
 
 omp extensions (no Tern half; installed through omp's `config.yml`, see their READMEs):
 
@@ -15,6 +16,22 @@ omp extensions (no Tern half; installed through omp's `config.yml`, see their RE
 | --- | --- |
 | [omp-account](omp-account) | `/account`: which OAuth account of the model's provider this conversation uses, shown in the status line |
 | [omp-artifacts](omp-artifacts) | Claude-style artifacts: the agent's `artifact` tool saves HTML, SVG, Markdown, Mermaid or code with versions and shows it in a Tern browser pane beside the chat |
+
+## Workspace showcase
+
+This is a live Tern workspace on Windows, not a preset. **Agentlar** keeps personal (`mine`) and work (`work`)
+omp profiles open beside a shared quota panel. **Default omp** is a separate tab for one-off work,
+and **Notlar** keeps notes and canvas blocks out of the coding tabs.
+
+![Agentlar tab: two omp profiles and a shared usage panel in three panes](docs/screenshots/agents.webp)
+
+The **Hermes** tab runs the native chat from [Emirfs/hermes-tern](https://github.com/Emirfs/hermes-tern) beside two shells.
+The same fork also supports a separate **ESP** workspace with one live Hermes tab per device.
+
+![Hermes chat on the left and two stacked PowerShell panes on the right](docs/screenshots/hermes.webp)
+
+Account names and local paths are redacted. The wallpaper is a personal [Backdrop](https://github.com/avcton/tern-backdrop)
+configuration; these plugins do not install the wallpaper or recreate the tabs.
 
 ## Install
 
