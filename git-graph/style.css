@@ -7,27 +7,26 @@
 
 /* ------------------------------------------------------------------ graph pieces */
 
+/* Dots are wider than a character and lines reach into the row padding: let them spill over the cell. */
 [data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child {
-	overflow: hidden;
-	/* Every lane must fit: a squeezed column would cut lanes off on the right. */
-	min-width: max-content;
-	flex-shrink: 0;
+	overflow: visible;
+	text-overflow: clip;
 }
+/* Each piece keeps its glyph's width: Tern sizes the column by its text, so a piece wider than its
+   character would be cut to "…". The glyph itself is hidden by a transparent fill, not by its color,
+   because the drawing uses currentColor. */
 [data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > span {
 	all: unset;
 	--gg-w: 2px;
 	--gg-reach: -8px;
 	display: inline-block;
 	position: relative;
-	width: 6px;
+	/* Rows start a few pixels left of the table, which clips there: keep the first lane's dot inside. */
+	transform: translateX(6px);
 	height: 18px;
+	line-height: 18px;
 	vertical-align: middle;
-	font-size: 0;
-	line-height: 0;
-	color: transparent;
-}
-[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > span.sf-t-code {
-	width: 14px;
+	-webkit-text-fill-color: transparent;
 }
 
 /* Lane colors (tokens double as color ids). */
