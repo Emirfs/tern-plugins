@@ -1,39 +1,52 @@
-/* Commit graph pieces: each lane cell of the Grafik column is a span with `gg-*` tokens (Tern renders a token
-   `x` as class `sf-t-x`). The glyph is hidden; lines, corners and the node are drawn in the lane's color, and
-   reach past the text box into the row's padding so lanes run unbroken from row to row. */
+/* Git grafiği. Two parts:
+   1. The graph column. Tern keeps only its own span tokens as classes, so host.luau spells each lane piece
+      with known tokens (see the table above `lane_spans`). Here, scoped to this block's graph column, those
+      tokens lose their usual look and draw the piece instead: lines, corners and the node, in the lane color,
+      reaching through the row padding so lanes run unbroken from row to row.
+   2. Fork-like layout: refs on the left of the list, the commit with its files and diff under it. */
 
-[data-surface='plugin.git-graph.graph'] .sf-t-gg {
+/* ------------------------------------------------------------------ graph pieces */
+
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child {
+	overflow: hidden;
+	/* Every lane must fit: a squeezed column would cut lanes off on the right. */
+	min-width: max-content;
+	flex-shrink: 0;
+}
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > span {
+	all: unset;
 	--gg-w: 2px;
 	--gg-reach: -8px;
 	display: inline-block;
 	position: relative;
-	/* px, not em: the glyph is hidden with font-size 0, which would make an em height 0. */
+	width: 6px;
 	height: 18px;
 	vertical-align: middle;
 	font-size: 0;
 	line-height: 0;
+	color: transparent;
 }
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-s { width: 14px; }
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-g { width: 6px; }
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > span.sf-t-code {
+	width: 14px;
+}
 
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-c1 { color: #4c9aff; }
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-c2 { color: #36b37e; }
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-c3 { color: #ff8b00; }
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-c4 { color: #a77bf3; }
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-c5 { color: #00b8d9; }
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-c6 { color: #f2668b; }
+/* Lane colors (tokens double as color ids). */
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-accent { color: #4c9aff; }
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-success { color: #36b37e; }
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-warning { color: #ff991f; }
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-info { color: #a77bf3; }
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-error { color: #00b8d9; }
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-muted { color: #f2668b; }
 
-[data-surface='plugin.git-graph.graph'] .sf-t-gg::before,
-[data-surface='plugin.git-graph.graph'] .sf-t-gg::after {
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > span::before,
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > span::after {
 	content: none;
 	position: absolute;
 	box-sizing: border-box;
 }
 
-/* Straight lane, and the lane under a crossing link. */
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-v::before,
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-tr::before,
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-tl::before {
+/* │ straight lane (em); also the lane under ┤ ├ (pending, typo). */
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > :is(.sf-t-em, .sf-t-pending, .sf-t-typo)::before {
 	content: '';
 	left: calc(50% - var(--gg-w) / 2);
 	width: var(--gg-w);
@@ -42,8 +55,8 @@
 	background: currentColor;
 }
 
-/* Horizontal link through a gap or an empty lane. */
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-h::before {
+/* ─ horizontal link (ins). */
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-ins:not(.sf-t-em, .sf-t-del, .sf-t-mark, .sf-t-num, .sf-t-title)::before {
 	content: '';
 	left: 0;
 	right: 0;
@@ -52,65 +65,69 @@
 	background: currentColor;
 }
 
-/* A lane that ends here, turning toward the commit: ╯ comes from above and goes left, ╰ goes right. */
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-jr::before,
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-jl::before {
+/* A link crossing another piece (┼ over a lane, or across a corner): the piece keeps ::before, the link
+   is ::after. Drawn in the piece's color. */
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-ins:is(.sf-t-em, .sf-t-del, .sf-t-mark, .sf-t-num, .sf-t-title)::after {
+	content: '';
+	left: 0;
+	right: 0;
+	top: calc(50% - var(--gg-w) / 2);
+	height: var(--gg-w);
+	background: currentColor;
+}
+
+/* ╯ (del) and ╰ (mark): a lane ending here, from above, turning toward the commit. */
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > :is(.sf-t-del, .sf-t-mark)::before {
 	content: '';
 	top: var(--gg-reach);
 	height: calc(50% - var(--gg-reach) + var(--gg-w) / 2);
 	border-bottom: var(--gg-w) solid currentColor;
 }
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-jr::before {
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-del::before {
 	left: 0;
 	right: calc(50% - var(--gg-w) / 2);
 	border-right: var(--gg-w) solid currentColor;
 	border-bottom-right-radius: 7px;
 }
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-jl::before {
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-mark::before {
 	left: calc(50% - var(--gg-w) / 2);
 	right: 0;
 	border-left: var(--gg-w) solid currentColor;
 	border-bottom-left-radius: 7px;
 }
 
-/* A lane opened for a merge's second parent: ╮ comes from the left and goes down, ╭ from the right. */
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-or::before,
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-ol::before {
+/* ╮ (num) and ╭ (title): a lane opened for a merge's second parent, from the side going down. */
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > :is(.sf-t-num, .sf-t-title)::before {
 	content: '';
 	top: calc(50% - var(--gg-w) / 2);
 	bottom: var(--gg-reach);
 	border-top: var(--gg-w) solid currentColor;
 }
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-or::before {
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-num::before {
 	left: 0;
 	right: calc(50% - var(--gg-w) / 2);
 	border-right: var(--gg-w) solid currentColor;
 	border-top-right-radius: 7px;
 }
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-ol::before {
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-title::before {
 	left: calc(50% - var(--gg-w) / 2);
 	right: 0;
 	border-left: var(--gg-w) solid currentColor;
 	border-top-left-radius: 7px;
 }
 
-/* An existing lane a merge links into from the side. */
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-tr::after,
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-tl::after {
+/* ┤ (pending) and ├ (typo): an existing lane a merge links into from the side. */
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > :is(.sf-t-pending, .sf-t-typo)::after {
 	content: '';
 	top: calc(50% - var(--gg-w) / 2);
 	height: var(--gg-w);
 	background: currentColor;
 }
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-tr::after { left: 0; right: 50%; }
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-tl::after { left: 50%; right: 0; }
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-pending::after { left: 0; right: 50%; }
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-typo::after { left: 50%; right: 0; }
 
-/* The commit: its lane above (t) and below (b), a link stub to the side (l, r), and the dot on top. */
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-n {
-	background-repeat: no-repeat;
-}
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-n.sf-t-gg-t::before,
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-n.sf-t-gg-b::before {
+/* The commit (strong): lane above (path), below (dim), link stub left (key) or right (link), the dot. */
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-strong:is(.sf-t-path, .sf-t-dim)::before {
 	content: '';
 	left: calc(50% - var(--gg-w) / 2);
 	width: var(--gg-w);
@@ -118,36 +135,120 @@
 	top: 50%;
 	bottom: 50%;
 }
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-n.sf-t-gg-t::before { top: var(--gg-reach); }
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-n.sf-t-gg-b::before { bottom: var(--gg-reach); }
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-n.sf-t-gg-r {
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-strong.sf-t-path::before { top: var(--gg-reach); }
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-strong.sf-t-dim::before { bottom: var(--gg-reach); }
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-strong:is(.sf-t-key, .sf-t-link) {
 	background-image: linear-gradient(currentColor, currentColor);
 	background-size: 50% var(--gg-w);
-	background-position: right center;
+	background-repeat: no-repeat;
 }
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-n.sf-t-gg-l {
-	background-image: linear-gradient(currentColor, currentColor);
-	background-size: 50% var(--gg-w);
-	background-position: left center;
-}
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-n::after {
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-strong.sf-t-key { background-position: left center; }
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-strong.sf-t-link { background-position: right center; }
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-strong::after {
 	content: '';
-	width: 9px;
-	height: 9px;
-	left: calc(50% - 4.5px);
-	top: calc(50% - 4.5px);
+	width: 10px;
+	height: 10px;
+	left: calc(50% - 5px);
+	top: calc(50% - 5px);
 	border-radius: 50%;
 	background: currentColor;
 }
-/* A merge is a ring, HEAD a dot with a halo. */
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-n.sf-t-gg-merge::after {
+/* Merge (icon): a ring. HEAD (hide): a dot with a halo. */
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-strong.sf-t-icon::after {
 	background: var(--panel, #16181a);
 	border: var(--gg-w) solid currentColor;
 }
-[data-surface='plugin.git-graph.graph'] .sf-t-gg-n.sf-t-gg-head::after {
-	width: 11px;
-	height: 11px;
-	left: calc(50% - 5.5px);
-	top: calc(50% - 5.5px);
+[data-surface='plugin.git-graph.graph'] [data-role='git-graph.graph'] .sf-tbl-c:first-child > .sf-t-strong.sf-t-hide::after {
+	width: 12px;
+	height: 12px;
+	left: calc(50% - 6px);
+	top: calc(50% - 6px);
 	box-shadow: 0 0 0 2px var(--panel, #16181a), 0 0 0 3.5px currentColor;
+}
+
+/* ------------------------------------------------------------------ Fork-like layout */
+
+[data-surface='plugin.git-graph.graph'] .gg-shell {
+	display: grid;
+	grid-template-columns: minmax(130px, 210px) minmax(0, 1fr);
+	gap: 10px;
+	align-items: start;
+}
+[data-surface='plugin.git-graph.graph'] .gg-list {
+	min-width: 0;
+}
+[data-surface='plugin.git-graph.graph'] .gg-side {
+	position: sticky;
+	top: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	max-height: 70vh;
+	overflow: auto;
+	padding-right: 8px;
+	border-right: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+}
+[data-surface='plugin.git-graph.graph'] .gg-side-h {
+	flex-shrink: 0;
+	margin: 10px 0 3px 4px;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	opacity: 0.65;
+}
+[data-surface='plugin.git-graph.graph'] .gg-side-h:first-child {
+	margin-top: 2px;
+}
+[data-surface='plugin.git-graph.graph'] .gg-ref {
+	all: unset;
+	flex-shrink: 0;
+	display: block;
+	padding: 2px 8px;
+	border-radius: 5px;
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-size: 12.5px;
+	line-height: 1.5;
+}
+[data-surface='plugin.git-graph.graph'] .gg-ref:hover {
+	background: color-mix(in srgb, currentColor 10%, transparent);
+}
+[data-surface='plugin.git-graph.graph'] .gg-ref.gg-cur {
+	font-weight: 600;
+	color: var(--accent);
+}
+[data-surface='plugin.git-graph.graph'] .gg-ref.gg-on {
+	background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* The dock: commit and files on the left, the diff on the right; side by side when there is room. */
+[data-surface='plugin.git-graph.graph'] .gg-detail {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	height: 42vh;
+	min-height: 220px;
+	overflow: auto;
+	padding-top: 8px;
+	border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+}
+[data-surface='plugin.git-graph.graph'] .gg-info {
+	flex: 1 1 260px;
+	min-width: 0;
+	max-height: 100%;
+	overflow: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+[data-surface='plugin.git-graph.graph'] .gg-diff {
+	flex: 2 1 380px;
+	min-width: 0;
+	max-height: 100%;
+	overflow: auto;
+	padding-left: 12px;
+	border-left: 1px solid color-mix(in srgb, currentColor 14%, transparent);
 }

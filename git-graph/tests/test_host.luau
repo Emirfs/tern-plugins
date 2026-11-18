@@ -75,6 +75,12 @@ local ok, err = pcall(function()
 	for _, k in { "text", "col", "row", "table", "card", "section", "progress", "md", "kv", "diff", "button", "lines", "code" } do
 		ui[k] = node(k)
 	end
+	ui.el = function(tag: string, props: any, children: any): any
+		return { k = "el", tag = tag, p = props, a = { props and props.text, children } }
+	end
+	ui.path = function(p: string): any
+		return { t = p, s = "path" }
+	end
 	ui.span = function(t: string, s: string?): any
 		return { t = t, s = s }
 	end
@@ -160,24 +166,33 @@ local ok, err = pcall(function()
 	check.truthy(has(main, "FRMWR-397: second line"), "subject shown")
 	check.truthy(has(main, "◉"), "head glyph drawn")
 	check.truthy(has(main, "side"), "branch chip on the first commit")
-	check.truthy(has(text(view.dock), "a.txt"), "detail lists the changed file")
-	check.eq(view.layer, nil, "no diff open yet")
+	check.truthy(has(main, "Dallar (2)"), "sidebar lists both local branches")
+	local dock = text(view.dock)
+	check.truthy(has(dock, "a.txt"), "detail lists the changed file")
+	check.truthy(has(dock, "+two"), "the first file's diff shows beside the files without asking")
+	check.eq(view.layer, nil, "nothing floats over the list")
 
-	-- Enter opens the selected file's diff above the graph; escape closes it
-	block.key(state, { name = "enter", ctrl = false, alt = false, meta = false, shift = false }, cx)
+	-- The sidebar jumps to a branch's commit; file rows (`f<n>`) are never taken for commits
+	local side_hash = state.commits[2].hash
+	block.event(state, { ev = "action", act = "ref", value = side_hash }, cx)
 	flush()
-	check.truthy(has(text(block.view(state, cx).layer), "+two"), "diff layer shows the change")
-	block.key(state, { name = "escape", ctrl = false, alt = false, meta = false, shift = false }, cx)
-	check.eq(block.view(state, cx).layer, nil, "escape closes the diff")
+	check.eq(state.selected, side_hash, "clicking a branch selects its commit")
+	block.event(state, { ev = "select", id = "x", item = "f1" }, cx)
+	flush()
+	check.eq(state.selected, side_hash, "a file row does not change the commit")
+	check.eq(state.err, nil, "no git error from a file row id")
+	block.event(state, { ev = "action", act = "ref", value = state.commits[1].hash }, cx)
+	flush()
 
 	-- Narrow pane: author, hash and toolbar hidden by default; Görünüm toggles a part and survives a save
 	cx.cols = 60
 	local narrow = text(block.view(state, cx).main)
 	check.eq(has(narrow, "Test"), false, "author column hidden when narrow")
 	check.eq(has(narrow, "Depolar"), false, "toolbar hidden when narrow")
+	check.eq(has(narrow, "Dallar ("), false, "sidebar hidden when narrow")
 	check.truthy(has(narrow, "FRMWR-397: second line"), "subjects still shown")
 	block.key(state, { name = "v", text = "v", ctrl = false, alt = false, meta = false, shift = false }, cx)
-	check.truthy(has(text(block.view(state, cx).layer), "Dar pane"), "v opens the Görünüm panel")
+	check.truthy(has(text(block.view(state, cx).dock), "Dar pane"), "v opens Görünüm in the dock")
 	block.event(state, { ev = "action", id = "parts", act = "layout", value = "narrow:author", item = "author" }, cx)
 	check.truthy(has(text(block.view(state, cx).main), "Test"), "author turned on for narrow panes")
 	block.event(state, { ev = "action", act = "threshold", value = "here" }, cx)
@@ -195,11 +210,24 @@ local ok, err = pcall(function()
 	block.event(state, { ev = "action", id = "commits", act = "Hash'i kopyala", item = first.hash }, cx)
 	check.eq(copied[1], first.hash, "copy puts the full hash on the clipboard")
 	local menu: { string } = nil :: any
-	for _, row in (view.main.a[1][3].a[2] :: { any }) do
-		if row.id == second.hash then
-			menu = row.menu
+	local function find_rows(n: any)
+		if type(n) ~= "table" then
+			return
+		end
+		if n.k == "table" and type(n.a) == "table" and type(n.a[2]) == "table" then
+			for _, row in n.a[2] do
+				if type(row) == "table" and row.id == second.hash then
+					menu = row.menu
+				end
+			end
+		end
+		for k, v in n do
+			if k ~= "p" then
+				find_rows(v)
+			end
 		end
 	end
+	find_rows(view.main)
 	check.truthy(menu and table.find(menu, "Dala geç: side") ~= nil, "switch offered for a branch on the commit")
 
 	block.event(state, { ev = "action", id = "commits", act = "Dala geç: side", item = second.hash }, cx)

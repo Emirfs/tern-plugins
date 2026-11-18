@@ -1,7 +1,7 @@
 # Git grafiği
 
-Bir deponun commit grafiği Tern paneli olarak: her dal kendi renkli şeridinde (birleşmeler halka, HEAD dolu
-halka), seçili commit'in mesajı, ebeveynleri ve değişen dosyaları, bir dosyanın diff'i grafiğin üstünde.
+Bir deponun commit grafiği Tern paneli olarak, Fork düzeninde: solda dallar, uzak dallar ve etiketler; ortada
+renkli şeritli commit listesi; altta seçili commit, değişen dosyaları ve seçili dosyanın diff'i yan yana.
 Fikir [mykeura/git-gui](https://github.com/mykeura/git-gui)'den; `git` PATH'te olmalı.
 
 ## Açmak
@@ -21,9 +21,11 @@ Panede **Depolar** (`o`) aynı seçiciyi açar, **Sabitle / Odağı izle** (`p`)
   HEAD. Çizgileri `style.css` çizer; stil yüklenmezse aynı grafik kutu karakterleriyle (`│ ● ╮ ╯`) görünür.
   Dal etiketleri mesajın önünde: geçerli dal vurgulu, `☁` uzak dal, `⌂` etiket. **Uzak dallar** (`u`) uzak
   dalları da çizer. İlk 400 commit okunur, tablonun sonundaki düğme sonrakileri yükler.
-- **Ayrıntı** (alt bölüm): mesajın gövdesi, yazar, tarih, ebeveynler (tıklayınca o commit'e gider), mesajdaki
-  Jira anahtarları, değişen dosyalar. Birleşmelerde dosyalar ilk ebeveyne göredir (PR'ın getirdikleri).
-- **Diff**: dosyaya çift tık ya da `enter`; `[` `]` dosyalar arasında gezer, `esc` kapatır.
+- **Sol sütun**: yerel dallar (geçerli dal `●`), her uzak depo ayrı başlık altında, etiketler; tıklayınca o
+  dalın commit'i seçilir.
+- **Alt bölüm**: commit seçince mesajın gövdesi, yazar, tarih, SHA, ebeveynler (tıklayınca o commit'e gider),
+  mesajdaki Jira anahtarları ve değişen dosyalar; ilk dosyanın diff'i hemen sağda açılır. Başka dosyaya
+  tıklamak ya da `[` `]` diff'i değiştirir. Birleşmelerde dosyalar ilk ebeveyne göredir (PR'ın getirdikleri).
 - **Sağ tık** bir commit'te: hash'i kopyala, web'de aç (GitHub/GitLab), buradan dal aç, AI'a açıklat, o
   commit'teki dallara geç, Jira kartını ve kasadaki kart notunu aç.
 - **Tuşlar**: `↑` `↓` / `j` `k` commit, `r` yenile, `f` fetch, `c` hash kopyala, `w` web, `b` dal aç, `a` AI,
@@ -32,13 +34,13 @@ Panede **Depolar** (`o`) aynı seçiciyi açar, **Sabitle / Odağı izle** (`p`)
 
 ## Görünüm: dar ve geniş pane
 
-Başlıktaki ayar düğmesi (`v`) **Görünüm** panelini açar. Pane belli bir genişliğin (sütun) altında **dar**,
-üstünde **geniş** sayılır; araç çubuğu, grafik, dal adları, yazar, zaman, hash ve ayrıntı bölümü her biri dar
-ve geniş için ayrı ayrı açılıp kapanır. Pane büyüyüp küçüldükçe görünüm kendiliğinden değişir.
+Başlıktaki ayar düğmesi (`v`) **Görünüm** panelini alt bölümde açar. Pane belli bir genişliğin (sütun) altında
+**dar**, üstünde **geniş** sayılır; araç çubuğu, sol sütun, grafik, dal adları, yazar, zaman, hash ve alt bölüm
+her biri dar ve geniş için ayrı ayrı açılıp kapanır. Pane büyüyüp küçüldükçe görünüm kendiliğinden değişir.
 
-- Eşik `−10` / `+10` ile ya da **Şu anki genişlik eşik olsun** ile ayarlanır (varsayılan 110 sütun).
-- Varsayılan: dar panede araç çubuğu, yazar ve hash kapalı; geniş panede hepsi açık. Araç çubuğu kapalıyken
-  tuşlar çalışmaya devam eder.
+- Eşik `Eşik −10` / `Eşik +10` ile ya da **Eşik = şu anki genişlik** ile ayarlanır (varsayılan 110 sütun).
+- Varsayılan: dar panede araç çubuğu, sol sütun, yazar ve hash kapalı; geniş panede hepsi açık. Araç çubuğu
+  kapalıyken tuşlar çalışmaya devam eder.
 - Ayar o pane'de saklanır; **Yeni paneller de böyle açılsın** onu yeni açılan panellerin varsayılanı yapar.
 
 ## Ne yazar

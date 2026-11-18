@@ -12,8 +12,9 @@ local Lanes = {}
 Lanes.COLORS = 6
 
 export type Input = { hash: string, parents: { string } }
--- One drawn cell: its glyph and the lane color index (1..COLORS) it belongs to; 0 is blank.
-export type Cell = { ch: string, color: number }
+-- One drawn cell: its glyph and the lane color index (1..COLORS) it belongs to; 0 is blank. `through` marks a
+-- horizontal link passing across a piece that keeps its own glyph (a crossing lane, a corner of a lane ending).
+export type Cell = { ch: string, color: number, through: boolean? }
 export type Row = {
 	-- Lane the commit sits on (1-based).
 	col: number,
@@ -49,9 +50,11 @@ local function link(cells: { Cell }, from: number, to: number, cap: string, colo
 	for i = a + step, b - step, step do
 		local cell = cells[i]
 		if cell.ch == "│" then
-			cells[i] = { ch = "┼", color = cell.color }
+			cells[i] = { ch = "┼", color = cell.color, through = true }
 		elseif cell.ch == " " or cell.ch == "─" then
 			cells[i] = { ch = "─", color = color }
+		else
+			cell.through = true
 		end
 	end
 	cells[b] = { ch = cap, color = color }

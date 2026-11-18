@@ -40,7 +40,8 @@ type Config = {
 	ai_argv: { string },
 }
 type Ask = { kind: string, run: (value: any) -> () }
-type DiffView = { path: string, text: string?, err: string? }
+-- The diff shown beside the file list: which commit and file it is, and what git said.
+type DiffView = { hash: string, path: string, text: string?, err: string? }
 type State = {
 	cx: BlockCx,
 	closed: boolean,
@@ -62,6 +63,8 @@ type State = {
 	web: string?,
 	fetched: number?,
 	selected: string?,
+	-- Every branch, remote branch and tag with the commit it points at (the sidebar).
+	refs: { parse.RefTip },
 	details: { [string]: parse.Detail },
 	file: number,
 	diff: DiffView?,
@@ -190,6 +193,7 @@ local function relayout(state: State)
 end
 
 local load_detail: (State, string) -> ()
+local open_diff: (State) -> ()
 
 local function select(state: State, hash: string?)
 	if hash == state.selected then
@@ -197,8 +201,13 @@ local function select(state: State, hash: string?)
 	end
 	state.selected = hash
 	state.file = 1
+	state.diff = nil
 	if hash then
-		load_detail(state, hash)
+		if state.details[hash] then
+			open_diff(state)
+		else
+			load_detail(state, hash)
+		end
 	end
 end
 
@@ -245,7 +254,8 @@ local function poll(state: State, force: boolean)
 		if ok then
 			state.status = parse.status(out)
 		end
-		git(state, { "for-each-ref", "--format=%(objectname) %(refname)" }, function(ok2, refs, why)
+		git(state, { "for-each-ref", "--format=" .. parse.REFS_FORMAT }, function(ok2, refs, why)
+			state.refs = if ok2 then parse.ref_list(refs) else {}
 			git(state, { "rev-parse", "HEAD" }, function(ok3, head, _)
 				local sig = parse.signature(if ok2 then refs else "", if ok3 then head else "")
 				state.head = if ok3 then string.match(head, "%x+") else nil
@@ -272,7 +282,7 @@ local function set_repo(state: State, path: string?, follow: boolean)
 	end
 	state.gen += 1
 	state.repo = path
-	state.commits, state.rows, state.details, state.ai = {}, {}, {}, {}
+	state.commits, state.rows, state.details, state.ai, state.refs = {}, {}, {}, {}, {}
 	state.selected, state.diff, state.sig, state.status, state.head, state.web = nil, nil, nil, nil, nil, nil
 	state.err, state.more, state.file = nil, false, 1
 	if path == nil then
@@ -323,6 +333,10 @@ load_detail = function(state: State, hash: string)
 			local d = parse.detail(show, if ok2 then files else "")
 			if d then
 				state.details[hash] = d
+				-- The first file's diff shows with the commit, as in Fork.
+				if hash == state.selected then
+					open_diff(state)
+				end
 			end
 			render(state)
 		end)
@@ -333,13 +347,18 @@ load_detail = function(state: State, hash: string)
 	end
 end
 
-local function open_diff(state: State)
+open_diff = function(state: State)
 	local d = if state.selected then state.details[state.selected] else nil
 	if d == nil or #d.files == 0 then
+		state.diff = nil
 		return
 	end
-	local file = d.files[math.clamp(state.file, 1, #d.files)]
-	local view: DiffView = { path = file.path }
+	state.file = math.clamp(state.file, 1, #d.files)
+	local file = d.files[state.file]
+	if state.diff and state.diff.hash == d.hash and state.diff.path == file.path then
+		return
+	end
+	local view: DiffView = { hash = d.hash, path = file.path }
 	state.diff = view
 	git(state, parse.diff_args(d.hash, file), function(ok, out, why)
 		if state.diff ~= view then
@@ -604,12 +623,20 @@ end
 
 -- ---------------------------------------------------------------- view
 
--- Glyph → drawn piece. style.css draws each piece (lines, corners, the node) in the span's color and hides the
--- glyph; without the stylesheet the glyphs themselves still read as a `git log --graph`.
+-- Graph cells as styled spans. Tern keeps only its own span tokens as classes (`sf-t-<token>`) and drops
+-- the rest, so each piece is spelled with known tokens and style.css (scoped to this block's graph column)
+-- resets what those tokens normally do and draws the piece: lines, corners and the node, in the lane's
+-- color, reaching through the row padding so lanes run unbroken. Unstyled, the glyphs still read as
+-- `git log --graph`.
+--   cell:   `code` lane slot, `mono` gap between lanes
+--   piece:  `em` │  `ins` ─  `del` ╯  `mark` ╰  `num` ╮  `title` ╭  `pending` ┤  `typo` ├  `strong` node
+--   node:   `path` line above, `dim` line below, `key` link left, `link` link right, `icon` merge, `hide` HEAD
+--   color:  accent, success, warning, info, error, muted (lane colors 1–6)
 local PIECE: { [string]: string } = {
-	["│"] = "v", ["┼"] = "v", ["─"] = "h", ["╯"] = "jr", ["╰"] = "jl", ["╮"] = "or", ["╭"] = "ol",
-	["┤"] = "tr", ["├"] = "tl", ["●"] = "n", ["○"] = "n", ["◉"] = "n",
+	["│"] = "em", ["┼"] = "em", ["─"] = "ins", ["╯"] = "del", ["╰"] = "mark", ["╮"] = "num", ["╭"] = "title",
+	["┤"] = "pending", ["├"] = "typo", ["●"] = "strong", ["○"] = "strong", ["◉"] = "strong",
 }
+local LANE_TOKENS = { "accent", "success", "warning", "info", "error", "muted" }
 
 local function lane_spans(row: lanes.Row?): { Span | string }
 	local out: { Span | string } = {}
@@ -617,23 +644,33 @@ local function lane_spans(row: lanes.Row?): { Span | string }
 		return out
 	end
 	for i, cell in row.cells do
-		local tokens = { "gg", if i % 2 == 1 then "gg-s" else "gg-g" }
+		local tokens = { if i % 2 == 1 then "code" else "mono" }
 		local piece = PIECE[cell.ch]
 		if piece then
-			table.insert(tokens, "gg-" .. piece)
-			table.insert(tokens, `gg-c{cell.color}`)
+			table.insert(tokens, piece)
+			table.insert(tokens, LANE_TOKENS[cell.color] or "muted")
+			-- A link crossing this piece: drawn as a second, horizontal stroke (`ins` on a non-`─` piece).
+			if cell.through and piece ~= "ins" and piece ~= "strong" then
+				table.insert(tokens, "ins")
+			end
 		end
-		if piece == "n" then
-			local flags: { { any } } = { { "t", row.top }, { "b", row.bottom }, { "l", row.left }, { "r", row.right } }
-			for _, f in flags do
-				if f[2] then
-					table.insert(tokens, "gg-" .. (f[1] :: string))
-				end
+		if piece == "strong" then
+			if row.top then
+				table.insert(tokens, "path")
+			end
+			if row.bottom then
+				table.insert(tokens, "dim")
+			end
+			if row.left then
+				table.insert(tokens, "key")
+			end
+			if row.right then
+				table.insert(tokens, "link")
 			end
 			if cell.ch == "○" then
-				table.insert(tokens, "gg-merge")
+				table.insert(tokens, "icon")
 			elseif cell.ch == "◉" then
-				table.insert(tokens, "gg-head")
+				table.insert(tokens, "hide")
 			end
 		end
 		table.insert(out, ui.span(if cell.ch == " " then "\u{00A0}" else cell.ch, table.concat(tokens, " ")))
@@ -748,31 +785,85 @@ local function commit_table(state: State, vis: layout.Parts): Node
 	local empty = if state.repo == nil then "Bir terminale odaklan ya da Depolar'dan seç."
 		elseif state.loading then "Geçmiş okunuyor…"
 		else "Bu depoda commit yok."
-	return with(ui.table(cols, rows, { selectable = true, selected = state.selected, empty = empty }), { key = "commits", role = "git-graph.commits" })
+	-- The role scopes style.css to the graph column; without a graph the first column is the message.
+	return with(ui.table(cols, rows, { selectable = true, selected = state.selected, empty = empty }), {
+		key = "commits", role = if vis.graph then "git-graph.graph" else "git-graph.list",
+	})
 end
 
--- Görünüm: which parts show when the pane is narrow and when wide, and where narrow ends.
-local function settings_layer(state: State, cols: number): Node
+local function el(tag: string, props: { [string]: any }, children: { Node }?): Node
+	return ui.el(tag, props, children)
+end
+
+-- Fork's left column: local branches, remote branches by remote, tags. A click jumps to the ref's commit.
+local function sidebar(state: State): Node
+	local current = if state.status then state.status.branch else nil
+	local groups: { { title: string, items: { Node } } } = {}
+	local function group(title: string): { Node }
+		local last = groups[#groups]
+		if last and last.title == title then
+			return last.items
+		end
+		local items: { Node } = {}
+		table.insert(groups, { title = title, items = items })
+		return items
+	end
+	for _, ref in state.refs do
+		local title, label = "Dallar", ref.name
+		if ref.kind == "remote" then
+			local remote, rest = string.match(ref.name, "^([^/]+)/(.+)$")
+			title, label = "Uzak · " .. (remote or "?"), rest or ref.name
+		elseif ref.kind == "tag" then
+			title = "Etiketler"
+		end
+		local items = group(title)
+		if #items < 200 then
+			local cur = ref.kind == "branch" and ref.name == current
+			table.insert(items, el("button", {
+				class = "gg-ref" .. (if cur then " gg-cur" else "") .. (if state.selected == ref.hash then " gg-on" else ""),
+				text = (if cur then "● " else "") .. label,
+				title = `{ref.name} · {string.sub(ref.hash, 1, 7)}`,
+				actions = { click = "ref=" .. ref.hash },
+				key = ref.kind .. ":" .. ref.name,
+			}))
+		end
+	end
+	local children: { Node } = {}
+	for _, g in groups do
+		table.insert(children, el("div", { class = "gg-side-h", text = `{g.title} ({#g.items})`, key = "h:" .. g.title }))
+		for _, item in g.items do
+			table.insert(children, item)
+		end
+	end
+	if #children == 0 then
+		table.insert(children, el("div", { class = "gg-side-h", text = "Dal yok" }))
+	end
+	return el("div", { class = "gg-side", key = "side" }, children)
+end
+
+-- Görünüm: which parts show when the pane is narrow and when wide, and where narrow ends. Drawn in the dock
+-- (an opaque region), in plain text so it stays readable.
+local function settings_card(state: State, cols: number): Node
 	local l = state.layout
 	local mode = layout.mode(l, cols)
 	local rows: { TableRow } = {}
 	for _, part in layout.PARTS do
 		local function toggle(which: string): Cell
 			local on = (l :: any)[which][part.id] == true
-			return { button = { text = if on then "Açık" else "Kapalı", act = `layout={which}:{part.id}`, variant = if on then "primary" else "default" } }
+			return { button = { text = if on then "✓ Açık" else "Kapalı", act = `layout={which}:{part.id}`, variant = if on then "primary" else "default" } }
 		end
 		table.insert(rows, { id = part.id, cells = { part.label, toggle("narrow"), toggle("wide") } })
 	end
 	local children: { Node } = {
 		ui.text({
-			ui.span(`Pane şu an {cols} sütun: `, "muted"),
-			ui.span(if mode == "narrow" then "dar" else "geniş", "strong"),
-			ui.span(` · {l.threshold} sütunun altı dar sayılır`, "muted"),
+			ui.span(`Bu pane şu an {cols} sütun genişliğinde, yani `),
+			ui.span(if mode == "narrow" then "dar" else "geniş", "strong accent"),
+			ui.span(`. {l.threshold} sütunun altı dar sayılır.`),
 		}),
 		with(ui.row({
-			ui.button(`−{layout.STEP}`, { size = "sm", disabled = l.threshold <= layout.MIN, actions = { click = "threshold=-1" } }),
-			ui.button(`+{layout.STEP}`, { size = "sm", disabled = l.threshold >= layout.MAX, actions = { click = "threshold=1" } }),
-			ui.button("Şu anki genişlik eşik olsun", { size = "sm", variant = "quiet", actions = { click = "threshold=here" } }),
+			ui.button(`Eşik −{layout.STEP}`, { size = "sm", disabled = l.threshold <= layout.MIN, actions = { click = "threshold=-1" } }),
+			ui.button(`Eşik +{layout.STEP}`, { size = "sm", disabled = l.threshold >= layout.MAX, actions = { click = "threshold=1" } }),
+			ui.button("Eşik = şu anki genişlik", { size = "sm", actions = { click = "threshold=here" } }),
 		}), { key = "threshold" }),
 		with(ui.table({
 			{ id = "part", head = "Bölüm", grow = 1 },
@@ -780,92 +871,93 @@ local function settings_layer(state: State, cols: number): Node
 			{ id = "wide", head = "Geniş pane", align = "center" },
 		}, rows), { key = "parts" }),
 		with(ui.row({
-			ui.button("Yeni paneller de böyle açılsın", { icon = "check", size = "sm", actions = { click = "layout-default" } }),
-			ui.button("Varsayılana dön", { size = "sm", variant = "quiet", actions = { click = "layout-reset" } }),
+			ui.button("Yeni paneller de böyle açılsın", { icon = "check", size = "sm", variant = "primary", actions = { click = "layout-default" } }),
+			ui.button("Varsayılana dön", { size = "sm", actions = { click = "layout-reset" } }),
 			ui.button("Kapat", { keys = { "esc" }, size = "sm", actions = { click = "settings" } }),
 		}), { key = "actions" }),
 	}
-	return ui.col({ with(ui.card("Görünüm", children, { icon = "sliders" }), { key = "settings" }) })
+	return with(ui.card("Görünüm", children, { icon = "sliders" }), { key = "settings" })
 end
 
 local STATUS_TONE: { [string]: string } = { A = "success", D = "error", M = "warning", R = "info", C = "info", T = "muted" }
 
-local function detail_card(state: State): Node?
+local function diff_view(state: State): Node
+	local v = state.diff
+	local children: { Node } = {}
+	if v == nil then
+		table.insert(children, ui.text({ ui.span("Dosya seçin: farkı burada görünür.", "muted") }))
+	else
+		table.insert(children, with(ui.text({ ui.path(v.path), ui.span("  " .. string.sub(v.hash, 1, 7), "muted") }), { key = "diff-head" }))
+		if v.err then
+			table.insert(children, ui.text({ ui.span("⚠ " .. v.err, "warning") }))
+		end
+		if v.text then
+			table.insert(children, if v.text == "" then ui.text({ ui.span("Metin farkı yok (ikili dosya ya da yalnız mod değişti).", "muted") }) else ui.diff(v.text, v.path))
+		elseif v.err == nil then
+			table.insert(children, ui.progress(nil, "Diff okunuyor"))
+		end
+	end
+	return el("div", { class = "gg-diff", key = "diff" }, children)
+end
+
+-- Fork's lower half: the commit (message, author, parents, actions) and its files on the left, the selected
+-- file's diff on the right.
+local function details(state: State): Node?
 	local c = find(state, state.selected)
 	if c == nil then
 		return nil
 	end
 	local d = state.details[c.hash]
-	local children: { Node } = {}
+	local info: { Node } = {
+		with(ui.text({ ui.span(c.subject, "strong") }), { key = "subject" }),
+	}
 	if d == nil then
-		table.insert(children, ui.progress(nil, "Commit okunuyor"))
-	else
-		local rest = string.match(d.body, "^[^\n]*\n+(.+)$")
-		if rest then
-			table.insert(children, with(ui.text({ ui.span(rest, "muted") }), { key = "body" }))
-		end
-		local parents: { Node } = {}
-		for _, p in d.parents do
-			table.insert(parents, ui.button(string.sub(p, 1, 7), { size = "sm", variant = "quiet", actions = { click = "parent=" .. p } }))
-		end
-		for _, key in jira_keys(state, c) do
-			table.insert(parents, ui.button(key, { icon = "ticket", size = "sm", actions = { click = "jira=" .. key } }))
-		end
-		local meta: { { Spans } } = {
-			{ "Yazar", `{d.author} <{d.email}>` },
-			{ "Tarih", os.date("%Y-%m-%d %H:%M", d.time) :: string },
-		}
-		if d.committer ~= d.author then
-			table.insert(meta, { "Commit eden", d.committer })
-		end
-		table.insert(children, ui.kv(meta))
-		if #parents > 0 then
-			table.insert(children, with(ui.row(parents), { key = "parents" }))
-		end
-		local ai = state.ai[c.hash]
-		if ai then
-			table.insert(children, with(ui.section("AI özeti", { ui.md(ai) }), { key = "ai" }))
-		elseif state.ai_busy[c.hash] then
-			table.insert(children, ui.progress(nil, "AI açıklıyor"))
-		else
-			table.insert(children, ui.button(ACT_AI, { icon = "sparkles", keys = { "a" }, size = "sm", variant = "quiet", actions = { click = "ai" } }))
-		end
-		local files: { TableRow } = {}
-		for i, f in d.files do
-			table.insert(files, {
-				id = `f{i}`,
-				cells = {
-					{ text = f.status, dot = STATUS_TONE[f.status] or "muted" },
-					if f.old then { ui.span(f.old .. " → ", "muted"), ui.span(f.path) } else f.path,
-				},
-			})
-		end
-		table.insert(children, with(ui.table({
-			{ id = "st", head = "" },
-			{ id = "path", head = `Dosyalar ({#d.files}) · çift tık ya da enter: diff`, grow = 1, truncate = "start" },
-		}, files, { selectable = true, selected = `f{state.file}`, empty = "Dosya değişikliği yok." }), { key = "files" }))
+		table.insert(info, ui.progress(nil, "Commit okunuyor"))
+		return el("div", { class = "gg-detail", key = "detail" }, { el("div", { class = "gg-info" }, info), diff_view(state) })
 	end
-	return with(ui.card({ ui.span(c.short, "mono"), ui.span(" " .. c.subject) }, children, {
-		meta = parse.age(c.time, os.time()),
-	}), { key = "detail" })
-end
-
-local function diff_layer(state: State): Node?
-	local v = state.diff
-	if v == nil then
-		return nil
+	local rest = string.match(d.body, "^[^\n]*\n+(.+)$")
+	if rest then
+		table.insert(info, with(ui.text({ rest }), { key = "body" }))
 	end
-	local children: { Node } = {}
-	if v.err then
-		table.insert(children, ui.text({ ui.span("⚠ " .. v.err, "warning") }))
+	local meta: { { Spans } } = {
+		{ "Yazar", `{d.author} <{d.email}>` },
+		{ "Tarih", (os.date("%Y-%m-%d %H:%M", d.time) :: string) .. " · " .. parse.age(d.time, os.time()) },
+		{ "SHA", ui.span(d.hash, "mono") },
+	}
+	if d.committer ~= d.author then
+		table.insert(meta, { "Commit eden", d.committer })
 	end
-	if v.text then
-		table.insert(children, if v.text == "" then ui.text({ ui.span("Bu dosyada metin farkı yok (ikili dosya ya da yalnız mod).", "muted") }) else ui.diff(v.text, v.path))
-	elseif v.err == nil then
-		table.insert(children, ui.progress(nil, "Diff okunuyor"))
+	table.insert(info, with(ui.kv(meta), { key = "meta" }))
+	local buttons: { Node } = {}
+	for _, p in d.parents do
+		table.insert(buttons, ui.button(string.sub(p, 1, 7), { icon = "git-commit", size = "sm", title = "Ebeveyn commit'e git", actions = { click = "parent=" .. p } }))
 	end
-	table.insert(children, with(ui.button("Kapat", { keys = { "esc" }, size = "sm", actions = { click = "close" } }), { key = "close" }))
-	return ui.col({ with(ui.card(v.path, children, { icon = "diff" }), { key = "diff" }) })
+	for _, key in jira_keys(state, c) do
+		table.insert(buttons, ui.button(key, { icon = "ticket", size = "sm", actions = { click = "jira=" .. key } }))
+	end
+	table.insert(buttons, ui.button("Kopyala", { icon = "copy", keys = { "c" }, size = "sm", actions = { click = "copy" } }))
+	if not state.ai[c.hash] then
+		table.insert(buttons, ui.button(ACT_AI, { icon = "sparkles", keys = { "a" }, size = "sm", busy = state.ai_busy[c.hash] == true, actions = { click = "ai" } }))
+	end
+	table.insert(info, with(ui.row(buttons), { key = "buttons" }))
+	if state.ai[c.hash] then
+		table.insert(info, with(ui.section("AI özeti", { ui.md(state.ai[c.hash]) }), { key = "ai" }))
+	end
+	local files: { TableRow } = {}
+	for i, f in d.files do
+		table.insert(files, {
+			id = `f{i}`,
+			cells = {
+				{ text = f.status, dot = STATUS_TONE[f.status] or "muted" },
+				if f.old then { ui.span(f.old .. " → ", "muted"), ui.span(f.path) } else f.path,
+			},
+		})
+	end
+	table.insert(info, with(ui.table({
+		{ id = "st", head = "" },
+		{ id = "path", head = `Değişen dosyalar ({#d.files})`, grow = 1, truncate = "start" },
+	}, files, { selectable = true, selected = `f{state.file}`, empty = "Dosya değişikliği yok." }), { key = "files" }))
+	return el("div", { class = "gg-detail", key = "detail" }, { el("div", { class = "gg-info", key = "info" }, info), diff_view(state) })
 end
 
 -- ---------------------------------------------------------------- block
@@ -925,6 +1017,13 @@ local function on_action(state: State, act: string, item: string?, window: strin
 	elseif name == "jira" and value then
 		state.cx:open(`{state.cfg.jira_url}/browse/{value}`, if window then { window = window } else nil)
 		return
+	elseif name == "ref" and value then
+		if find(state, value) then
+			select(state, value)
+		else
+			state.cx:toast("info", "Bu dalın commit'i yüklü sayfalarda değil", "Uzak dallar ya da daha fazla commit yükleyin.")
+		end
+		return
 	elseif name == "layout" and value then
 		local mode, part = string.match(value, "^(%a+):(%a+)$")
 		if mode and part then
@@ -958,8 +1057,8 @@ local function on_action(state: State, act: string, item: string?, window: strin
 		poll(state, true)
 	elseif act == "more" then
 		load_log(state, false)
-	elseif act == "close" then
-		state.diff = nil
+	elseif act == "copy" and state.selected then
+		on_action(state, ACT_COPY, state.selected, window)
 	elseif act == "ai" then
 		local c = find(state, state.selected)
 		if c then
@@ -988,7 +1087,7 @@ tern.block.define("graph", {
 			commits = {}, rows = {}, more = false, loading = false, err = nil, note = nil,
 			status = nil, sig = nil, head = nil, web = nil, fetched = nil,
 			selected = if type(s.selected) == "string" then s.selected else nil,
-			details = {}, file = 1, diff = nil, ai = {}, ai_busy = {}, busy = nil, asks = {}, gen = 0,
+			details = {}, refs = {}, file = 1, diff = nil, ai = {}, ai_busy = {}, busy = nil, asks = {}, gen = 0,
 			layout = layout.sanitize(if type(s.layout) == "table" then s.layout else tern.kv.get("layout-default")),
 			settings = false,
 		}
@@ -1032,12 +1131,17 @@ tern.block.define("graph", {
 		if state.err then
 			table.insert(children, with(ui.text({ ui.span("⚠ " .. state.err, "warning") }), { key = "err" }))
 		end
-		table.insert(children, commit_table(state, vis))
-		local detail = if vis.detail then detail_card(state) else nil
+		local list = el("div", { class = "gg-list", key = "list" }, { commit_table(state, vis) })
+		table.insert(children, if vis.sidebar
+			then el("div", { class = "gg-shell", key = "shell" }, { sidebar(state), list })
+			else list)
+		-- The dock is an opaque region under the list: Görünüm when open, else the commit and its diff.
+		local dock: Node? = if state.settings then settings_card(state, cx.cols)
+			elseif vis.detail then details(state)
+			else nil
 		return {
 			main = ui.col(children),
-			dock = if detail then ui.col({ detail }) else nil,
-			layer = if state.settings then settings_layer(state, cx.cols) else diff_layer(state),
+			dock = if dock then ui.col({ dock }) else nil,
 		}
 	end,
 
@@ -1050,27 +1154,21 @@ tern.block.define("graph", {
 
 	event = function(state: State, ev: UiEvent, _cx: BlockCx)
 		local item = if type(ev.item) == "string" then ev.item else nil
-		if ev.ev == "select" and item then
-			if ev.id == "files" then
-				state.file = tonumber(string.match(item, "^f(%d+)$")) or 1
-			elseif item ~= "more" then
-				select(state, item)
-			end
-		elseif ev.ev == "activate" and item then
-			if ev.id == "files" then
-				state.file = tonumber(string.match(item, "^f(%d+)$")) or 1
+		-- Rows of the file list are `f<n>`; commit rows are full hashes.
+		local file = if item then tonumber(string.match(item, "^f(%d+)$")) else nil
+		if (ev.ev == "select" or ev.ev == "activate") and item then
+			if file then
+				state.file = file
 				open_diff(state)
-			elseif item ~= "more" then
+			elseif #item == 40 then
 				select(state, item)
-				state.file = 1
-				open_diff(state)
 			end
 		elseif ev.ev == "action" and type(ev.act) == "string" then
 			local act = ev.act :: string
 			if type(ev.value) == "string" and not string.find(act, "=", 1, true) then
 				act = act .. "=" .. ev.value
 			end
-			on_action(state, act, if ev.id == "commits" or item then item else nil, ev.window)
+			on_action(state, act, if item and #item == 40 then item else nil, ev.window)
 		end
 	end,
 
@@ -1080,13 +1178,10 @@ tern.block.define("graph", {
 		end
 		local k = key.text or key.name
 		if k == "escape" or key.name == "escape" or key.name == "esc" then
-			if state.settings then
-				state.settings = false
-			elseif state.diff then
-				state.diff = nil
-			else
+			if not state.settings then
 				return false
 			end
+			state.settings = false
 		elseif k == "v" then
 			state.settings = not state.settings
 		elseif key.name == "down" or k == "j" then
@@ -1099,10 +1194,6 @@ tern.block.define("graph", {
 				return false
 			end
 			state.file = math.clamp(state.file + (if k == "]" then 1 else -1), 1, #d.files)
-			if state.diff then
-				open_diff(state)
-			end
-		elseif key.name == "enter" then
 			open_diff(state)
 		elseif k == "r" then
 			on_action(state, "refresh", nil, nil)

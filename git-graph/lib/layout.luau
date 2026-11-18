@@ -9,12 +9,13 @@ export type Layout = { threshold: number, narrow: Parts, wide: Parts }
 
 Layout.PARTS = {
 	{ id = "toolbar", label = "Araç çubuğu" },
+	{ id = "sidebar", label = "Sol sütun: dallar, uzak dallar, etiketler" },
 	{ id = "graph", label = "Grafik" },
 	{ id = "refs", label = "Dal ve etiket adları" },
 	{ id = "author", label = "Yazar" },
 	{ id = "age", label = "Zaman" },
 	{ id = "hash", label = "Hash" },
-	{ id = "detail", label = "Ayrıntı (mesaj, dosyalar)" },
+	{ id = "detail", label = "Alt bölüm: commit, dosyalar ve diff" },
 }
 
 Layout.MIN, Layout.MAX, Layout.STEP = 40, 300, 10
@@ -22,8 +23,8 @@ Layout.MIN, Layout.MAX, Layout.STEP = 40, 300, 10
 function Layout.default(): Layout
 	return {
 		threshold = 110,
-		narrow = { toolbar = false, graph = true, refs = true, author = false, age = true, hash = false, detail = true },
-		wide = { toolbar = true, graph = true, refs = true, author = true, age = true, hash = true, detail = true },
+		narrow = { toolbar = false, sidebar = false, graph = true, refs = true, author = false, age = true, hash = false, detail = true },
+		wide = { toolbar = true, sidebar = true, graph = true, refs = true, author = true, age = true, hash = true, detail = true },
 	}
 end
 

@@ -177,6 +177,39 @@ function Parse.status(text: string): Status
 	return st
 end
 
+-- Tags peeled to their commit, so an annotated tag points where the graph draws it.
+Parse.REFS_FORMAT = "%(if)%(*objectname)%(then)%(*objectname)%(else)%(objectname)%(end) %(refname)"
+
+export type RefTip = { name: string, kind: "branch" | "remote" | "tag", hash: string }
+
+--- `for-each-ref --format=REFS_FORMAT`: branches, remotes (without `<remote>/HEAD`) and tags, each sorted.
+function Parse.ref_list(text: string): { RefTip }
+	local out: { RefTip } = {}
+	for line in string.gmatch(text, "[^\r\n]+") do
+		local hash, ref = string.match(line, "^(%x+) (%S+)$")
+		if hash and ref then
+			local branch = string.match(ref, "^refs/heads/(.+)$")
+			local remote = string.match(ref, "^refs/remotes/(.+)$")
+			local tag = string.match(ref, "^refs/tags/(.+)$")
+			if branch then
+				table.insert(out, { name = branch, kind = "branch", hash = hash })
+			elseif remote and not string.match(remote, "/HEAD$") then
+				table.insert(out, { name = remote, kind = "remote", hash = hash })
+			elseif tag then
+				table.insert(out, { name = tag, kind = "tag", hash = hash })
+			end
+		end
+	end
+	local order = { branch = 1, remote = 2, tag = 3 }
+	table.sort(out, function(a, b)
+		if a.kind ~= b.kind then
+			return order[a.kind] < order[b.kind]
+		end
+		return string.lower(a.name) < string.lower(b.name)
+	end)
+	return out
+end
+
 --- What changes when anything moves: every ref and HEAD. `for-each-ref` then `rev-parse HEAD`.
 function Parse.signature(refs: string, head: string): string
 	return trim(head) .. "\n" .. trim(refs)
