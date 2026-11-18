@@ -9,7 +9,8 @@ Plugins for [Tern](https://docs.stencil.so/tern/), one installable folder each.
 | [split-columns](split-columns) | Turns a grid of split rows into columns, so each column's divider moves on its own |
 | [mods](mods) | Switchable UI mods (tab styles, profile accents, focus mode, privacy blur, live wallpaper, composer and busy animations, …) with a settings panel and your own CSS mods |
 | [hermes-bridge](hermes-bridge) | Connects Carly, Hermes and omp, with a shortcut to open a live Hermes tab for each field device |
-| [todo-jira](todo-jira) | Assigned Jira issues in Tern’s Markdown TODO board, reviewed edits, Hermes Kanban and private memory drafts |
+| [todo-jira](todo-jira) | Assigned Jira issues in Tern’s Markdown TODO board, a Jira pane with every comment, reviewed edits, Hermes Kanban handoff and Jira comment drafts from the memory vault |
+| [hafiza](hafiza) | The shared memory vault's inbox (accept or reject what agents propose) and today's note |
 
 omp extensions (no Tern half; installed through omp's `config.yml`, see their READMEs):
 
