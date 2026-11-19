@@ -37,13 +37,12 @@ tern-bridge status [--json]               # bekleyen / başarısız / son işler
 `-` metni stdin'den okur, `--from NAME` göndereni yazar, `--wait N` sonucu bekler (çıkış 0 tamam,
 1 başarısız, 2 hâlâ bekliyor: Tern ya da eklenti çalışmıyor).
 
-`read`: Markdown dosyasını "Okuma" oturumunda (yoksa açılır, ilk kabuk sekmesi kapanır) yeni bir sekmede,
-sekme adı `T` ile açar ve kısa bir bilgi bildirimi gösterir; sekmeyi kapatmak = okundu. `-` stdin'i
+`read`: Markdown dosyasını kullanıcının o an baktığı oturumda yeni, mavi bir sekmede açar (sekme adı `T`)
+ve kısa bir bilgi bildirimi gösterir; sekmeyi kapatmak = okundu. `-` stdin'i
 (≤ 200 KB) `plugin-data\hermes-bridge\reading\<YYYYMMDD-HHMMSS>-<slug>.md` altına yazar (spool'un
 kardeşi), iş o yolu taşır; PATH de ≤ 200 KB olmalı. Aynı `KEY` bir kez açılır (kv `read_seen`, son 500
 anahtar; tekrar `done/` altına `duplicate = true` ile düşer). `cx.docs:open`'ın odak seçeneği yok:
-belge kullanıcının oturumunda açılırsa `move_to_new_tab(…, {focus = false})` ile Okuma'ya taşınır, sonra
-önceki oturum ve odaklı bölme geri getirilir (kısa bir titreme olabilir). Üreticiler: Hermes cron
+açtıktan sonra kullanıcının odaklı bölmesi geri getirilir, sekme sekme çubuğunda bekler. Üreticiler: Hermes cron
 `hafiza_collect.py` (günlük not yazılıp oturunca `daily-<tarih>`), cihaz ajanları, hafıza önerileri,
 kanban.
 

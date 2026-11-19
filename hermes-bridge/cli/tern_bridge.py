@@ -8,7 +8,7 @@ leader window polls it every 2 s and moves each job to done/ or failed/ with the
   tern-bridge omp [--cwd DIR] PROMPT...     start an omp agent tab with PROMPT
   tern-bridge esp DEVICE                    open/focus the ESP device's live Hermes tab
   tern-bridge notify [--level L] TEXT...    show a toast in Tern
-  tern-bridge read --title T --key K (PATH | -)   open Markdown as a tab of Tern session "Okuma"
+  tern-bridge read --title T --key K (PATH | -)   open Markdown as a new tab of the session shown in Tern
   tern-bridge status [--json]               pending, failed and recent jobs
 
 A text/prompt of `-` is read from stdin (use it for long or multi-line prompts). `--wait SECONDS`
@@ -234,7 +234,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--title", default=None, help="secondary line")
     p.add_argument("text", nargs="+", help="the message (- reads stdin)")
 
-    p = sub.add_parser("read", parents=[common], help="open Markdown as a new tab of Tern session \"Okuma\"")
+    p = sub.add_parser("read", parents=[common], help="open Markdown as a new tab of the session shown in Tern")
     p.add_argument("--title", required=True, help=f"tab title (<= {TITLE_MAX} bytes)")
     p.add_argument("--key", required=True, help="dedupe key: a key opened once is not opened again")
     p.add_argument("source", help="Markdown file, or - for stdin (stored under reading/)")
