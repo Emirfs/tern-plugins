@@ -21,6 +21,9 @@ export type Job = {
 	how: string?,
 	-- esp_open
 	device: string?,
+	-- read (also title)
+	path: string?,
+	key: string?,
 }
 
 export type Device = {
@@ -33,12 +36,22 @@ export type Device = {
 }
 
 bridge.VERSION = 1
-bridge.KINDS = { carly = true, omp = true, esp_open = true, notify = true }
+bridge.KINDS = { carly = true, omp = true, esp_open = true, notify = true, read = true }
 bridge.LEVELS = { info = true, success = true, error = true }
 bridge.HOWS = { tab = true, split = true, replace_if_alone = true }
 bridge.CONTEXT_MAX = 400
 
-local LIMITS = { text = 8000, prompt = 32000, device = 200, cwd = 1024, command = 1024, title = 120, from = 64 }
+local LIMITS = {
+	text = 8000,
+	prompt = 32000,
+	device = 200,
+	cwd = 1024,
+	command = 1024,
+	title = 120,
+	from = 64,
+	path = 1024,
+	key = 200,
+}
 
 local function str(v: any, field: string): (string?, string?)
 	if v == nil then
@@ -74,7 +87,7 @@ function bridge.validate(raw: any): (Job?, string?)
 		return nil, "job has no id"
 	end
 	local job: Job = { v = raw.v, id = raw.id, kind = kind }
-	for _, field in { "from", "text", "level", "title", "prompt", "cwd", "command", "how", "device" } do
+	for _, field in { "from", "text", "level", "title", "prompt", "cwd", "command", "how", "device", "path", "key" } do
 		local value, err = str(raw[field], field)
 		if err then
 			return nil, err
@@ -103,8 +116,34 @@ function bridge.validate(raw: any): (Job?, string?)
 		end
 	elseif kind == "esp_open" and job.device == nil then
 		return nil, "esp_open job needs a device"
+	elseif kind == "read" then
+		for _, field in { "path", "title", "key" } do
+			if (job :: any)[field] == nil then
+				return nil, `read job needs a {field}`
+			end
+		end
 	end
 	return job, nil
+end
+
+--- `seen` with `key` appended, oldest entries dropped past `max`; nil when `key` is already in it.
+function bridge.remember(seen: any, key: string, max: number): { string }?
+	local list: { string } = {}
+	if type(seen) == "table" then
+		for _, k in seen do
+			if type(k) == "string" then
+				if k == key then
+					return nil
+				end
+				table.insert(list, k)
+			end
+		end
+	end
+	table.insert(list, key)
+	while #list > max do
+		table.remove(list, 1)
+	end
+	return list
 end
 
 --- Whether a spool directory entry is a finished job file (`tern-bridge` writes `.tmp` files, then renames).

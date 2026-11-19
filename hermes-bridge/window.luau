@@ -24,6 +24,9 @@ local MAX_JOB_BYTES = 256 * 1024
 local MAX_JOBS_PER_TICK = 8
 local KEEP_RECORDS = 200
 local ESP_SESSION = "ESP"
+local READ_SESSION = "Okuma"
+local READ_SEEN_KEY = "read_seen"
+local READ_SEEN_MAX = 500
 local LEADER_KEY = "leader"
 local DEVICES_KEY = "devices"
 local ID = "hermes-bridge"
@@ -232,6 +235,74 @@ local function open_device(cx: WindowCx, query: string): { [string]: any }
 	return { device = id, name = name, tab = tab, opened = true, known = d ~= nil }
 end
 
+local function tab_info(cx: WindowCx, tab: number): any?
+	for _, t in cx.session:tabs() do
+		if t.id == tab then
+			return t
+		end
+	end
+	return nil
+end
+
+--- Opens a Markdown file as a new tab of session "Okuma", titled, once per key (bounded seen-set in kv).
+--- `cx.docs:open` has no reveal option, so the user's session and focused pane are put back afterwards.
+local function open_reading(cx: WindowCx, job: Job): { [string]: any }
+	local key, title, path = job.key :: string, job.title :: string, job.path :: string
+	local seen = bridge.remember(tern.kv.get(READ_SEEN_KEY), key, READ_SEEN_MAX)
+	if not seen then
+		return { key = key, opened = false, duplicate = true }
+	end
+	if not tern.fs.exists(path) then
+		error(`no such file {path}`)
+	end
+	local prev_session = cx.sessions:current().id
+	local prev_pane = cx.session:focused()
+	local session = cx.session:find_session(READ_SESSION)
+	local stray: { number } = {}
+	if not session then
+		local created = cx.sessions:create({ name = READ_SESSION, cwd = home() })
+		session = created.id
+		for _, tab in cx.session:tabs() do
+			if tab.session == created.id then
+				table.insert(stray, tab.pane)
+			end
+		end
+	end
+	local okuma = session :: number
+	local pane = cx.docs:open(path, { how = "tab" })
+	local tab = cx.session:tab_of(pane)
+	local info = if tab then tab_info(cx, tab) else nil
+	if not info or info.session ~= okuma then
+		-- Opened in the user's session: move it into a new last tab of "Okuma" without revealing it.
+		local moved, err = cx.layout:move_to_new_tab(pane, okuma, { focus = false })
+		if not moved then
+			error(err or "could not move the document into the Okuma session")
+		end
+		tab = moved
+	end
+	local t = tab :: number
+	cx.layout:name_tab(t, title)
+	pcall(function()
+		cx.layout:color_tab(t, "blue")
+	end)
+	for _, p in stray do
+		pcall(function()
+			cx.layout:close(p)
+		end)
+	end
+	pcall(function()
+		if prev_session ~= okuma then
+			cx.sessions:switch(prev_session)
+		end
+		if prev_pane then
+			cx.layout:focus(prev_pane)
+		end
+	end)
+	tern.kv.set(READ_SEEN_KEY, seen)
+	cx:toast("info", `Okuma: {title}`, if job.from then `tern-bridge · {job.from}` else "tern-bridge")
+	return { key = key, opened = true, tab = t, pane = pane }
+end
+
 local function start_omp(cx: WindowCx, prompt: string, cwd: string?, command: string?, how: string?): number
 	return cx.agents:start({
 		prompt = prompt,
@@ -257,6 +328,8 @@ local function run_job(cx: WindowCx, job: Job): any
 		local sub = job.title or (if job.from then `tern-bridge · {job.from}` else "tern-bridge")
 		cx:toast((job.level or "info") :: any, job.text :: string, sub)
 		return { shown = true }
+	elseif job.kind == "read" then
+		return open_reading(cx, job)
 	end
 	error(`unknown kind {job.kind}`)
 end

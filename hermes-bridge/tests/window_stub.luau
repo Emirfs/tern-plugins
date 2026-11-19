@@ -243,6 +243,17 @@ function stub.new(root: string): any
 				end
 				return nil
 			end,
+			focused = function(_self: any): number?
+				return w.focused
+			end,
+			tab_of = function(_self: any, pane: number): number?
+				for _, t in w.tabs do
+					if t.pane == pane then
+						return t.id
+					end
+				end
+				return nil
+			end,
 			tabs = function(_self: any): { any }
 				return table.clone(w.tabs)
 			end,
@@ -256,6 +267,9 @@ function stub.new(root: string): any
 				table.insert(w.tabs, { id = w.next_id, session = s.id, pane = w.next_id * 10, title = "pwsh" })
 				w.current = s.id
 				return { id = s.id, name = s.name, host = 0, current = true, locked = false, tabs = 1 }
+			end,
+			current = function(_self: any): any
+				return { id = w.current }
 			end,
 			switch = function(_self: any, s: number)
 				w.current = s
@@ -292,6 +306,33 @@ function stub.new(root: string): any
 			end,
 			focus = function(_self: any, pane: number)
 				w.focused = pane
+			end,
+			name_tab = function(_self: any, tab: number, name: string?)
+				for _, t in w.tabs do
+					if t.id == tab then
+						t.name = name
+					end
+				end
+			end,
+			move_to_new_tab = function(_self: any, pane: number, session: number?, reveal: any): (number?, string?)
+				for _, t in w.tabs do
+					if t.pane == pane then
+						w.next_id += 1
+						t.id, t.session, t.moved_reveal = w.next_id, session or t.session, reveal
+						return t.id, nil
+					end
+				end
+				return nil, "no such pane"
+			end,
+		}
+		-- Like Tern: a document opens in the current session and takes focus.
+		cx.docs = {
+			open = function(_self: any, path: string, opts: any): number
+				w.next_id += 1
+				local pane = w.next_id * 10
+				table.insert(w.tabs, { id = w.next_id, session = w.current, pane = pane, title = path, doc = path, how = opts.how })
+				w.focused = pane
+				return pane
 			end,
 		}
 		w.cx = cx

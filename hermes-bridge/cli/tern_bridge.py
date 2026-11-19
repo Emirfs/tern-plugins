@@ -8,6 +8,7 @@ leader window polls it every 2 s and moves each job to done/ or failed/ with the
   tern-bridge omp [--cwd DIR] PROMPT...     start an omp agent tab with PROMPT
   tern-bridge esp DEVICE                    open/focus the ESP device's live Hermes tab
   tern-bridge notify [--level L] TEXT...    show a toast in Tern
+  tern-bridge read --title T --key K (PATH | -)   open Markdown as a tab of Tern session "Okuma"
   tern-bridge status [--json]               pending, failed and recent jobs
 
 A text/prompt of `-` is read from stdin (use it for long or multi-line prompts). `--wait SECONDS`
@@ -19,10 +20,16 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import secrets
 import sys
 import time
 from pathlib import Path
+
+READ_MAX_BYTES = 200 * 1024
+# Limits the plugin's validation enforces (bridge.luau LIMITS).
+TITLE_MAX = 120
+KEY_MAX = 200
 
 VERSION = 1
 PLUGIN_ID = "hermes-bridge"
@@ -48,6 +55,52 @@ def write_atomic(path: Path, data: dict) -> None:
     tmp = path.with_name(f".{path.stem}.tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
     os.replace(tmp, path)
+
+
+def reading_dir() -> Path:
+    """Stdin Markdown for `read` lands beside the spool: <plugin-data>/hermes-bridge/reading."""
+    return spool_dir().parent / "reading"
+
+
+def slug(title: str) -> str:
+    s = re.sub(r"[^\w]+", "-", title.lower(), flags=re.UNICODE).strip("-_")
+    return s[:40].strip("-_") or "note"
+
+
+def store_reading(text: str, title: str) -> Path:
+    directory = reading_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    path = directory / f"{stamp}-{slug(title)}.md"
+    n = 1
+    while path.exists():
+        n += 1
+        path = directory / f"{stamp}-{slug(title)}-{n}.md"
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def read_job(parser: argparse.ArgumentParser, source: str, title: str, key: str) -> dict:
+    title, key = title.strip(), key.strip()
+    if not title or len(title.encode("utf-8")) > TITLE_MAX:
+        parser.error(f"--title must be 1-{TITLE_MAX} bytes")
+    if not key or len(key.encode("utf-8")) > KEY_MAX:
+        parser.error(f"--key must be 1-{KEY_MAX} bytes")
+    if source == "-":
+        data = sys.stdin.buffer.read(READ_MAX_BYTES + 1)
+        if len(data) > READ_MAX_BYTES:
+            parser.error(f"stdin is larger than {READ_MAX_BYTES // 1024} KB")
+        text = data.decode("utf-8", errors="replace")
+        if not text.strip():
+            parser.error("stdin is empty")
+        path = store_reading(text, title)
+    else:
+        path = Path(source).expanduser().resolve()
+        if not path.is_file():
+            parser.error(f"no such file: {path}")
+        if path.stat().st_size > READ_MAX_BYTES:
+            parser.error(f"{path} is larger than {READ_MAX_BYTES // 1024} KB")
+    return {"kind": "read", "path": str(path), "title": title, "key": key}
 
 
 def text_arg(parts: list[str]) -> str:
@@ -181,6 +234,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--title", default=None, help="secondary line")
     p.add_argument("text", nargs="+", help="the message (- reads stdin)")
 
+    p = sub.add_parser("read", parents=[common], help="open Markdown as a new tab of Tern session \"Okuma\"")
+    p.add_argument("--title", required=True, help=f"tab title (<= {TITLE_MAX} bytes)")
+    p.add_argument("--key", required=True, help="dedupe key: a key opened once is not opened again")
+    p.add_argument("source", help="Markdown file, or - for stdin (stored under reading/)")
+
     p = sub.add_parser("status", help="pending, failed and recent jobs")
     p.add_argument("--json", action="store_true")
     p.add_argument("--limit", type=int, default=5)
@@ -196,6 +254,8 @@ def main(argv: list[str] | None = None) -> int:
         job = {"kind": "omp", "prompt": text_arg(args.prompt), "cwd": cwd, "command": args.command, "how": args.how}
     elif args.cmd == "esp":
         job = {"kind": "esp_open", "device": args.device}
+    elif args.cmd == "read":
+        job = read_job(parser, args.source, args.title, args.key)
     else:
         job = {"kind": "notify", "text": text_arg(args.text), "level": args.level, "title": args.title}
     for key in ("text", "prompt"):

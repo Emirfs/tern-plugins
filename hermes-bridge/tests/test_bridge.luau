@@ -29,6 +29,24 @@ do
 	)
 end
 
+-- read jobs and the seen-set
+do
+	local job, err = bridge.validate({ v = 1, id = "a", kind = "read", path = "C:\\r\\x.md", title = "T", key = "k" })
+	check.eq(err, nil, "read valid")
+	check.eq((job :: any).key, "k", "read keeps key")
+	check.eq(select(2, bridge.validate({ v = 1, id = "a", kind = "read", title = "T", key = "k" })), "read job needs a path", "read without path")
+	check.eq(select(2, bridge.validate({ v = 1, id = "a", kind = "read", path = "p", key = "k" })), "read job needs a title", "read without title")
+	check.eq(select(2, bridge.validate({ v = 1, id = "a", kind = "read", path = "p", title = "T", key = " " })), "read job needs a key", "blank key")
+	check.eq(
+		select(2, bridge.validate({ v = 1, id = "a", kind = "read", path = "p", title = "T", key = string.rep("k", 201) })),
+		"key is longer than 200 bytes",
+		"key limit"
+	)
+	check.same(bridge.remember(nil, "a", 3), { "a" }, "remember into nothing")
+	check.eq(bridge.remember({ "a", "b" }, "a", 3), nil, "seen key")
+	check.same(bridge.remember({ "a", "b", "c" }, "d", 3), { "b", "c", "d" }, "bounded seen-set")
+end
+
 -- spool file names and pruning
 do
 	check.eq(bridge.is_job_file("20261117T101010-001-abc.json"), true, "job file")

@@ -196,6 +196,55 @@ do
 	check.eq(h.files["C:\\spool\\20260101T000001-000-h.json"], nil, "raised job claimed")
 end
 
+-- read: a new titled tab in session "Okuma", once per key, the user's focus put back
+do
+	local h = stub.new(ROOT)
+	local w = h.window()
+	w.focused = 100
+	local function job(name: string, body: any)
+		h.files["C:\\spool\\" .. name] = json(body)
+	end
+	h.files["C:\\r\\daily.md"] = "# Günlük\n"
+	job("20260101T000000-000-a.json", { v = 1, id = "a", kind = "read", path = "C:\\r\\daily.md", title = "🧠 Günlük özet 19.11", key = "daily-2026-11-19", from = "hafiza" })
+	job("20260101T000000-001-b.json", { v = 1, id = "b", kind = "read", path = "C:\\r\\daily.md", title = "again", key = "daily-2026-11-19" })
+	job("20260101T000000-002-c.json", { v = 1, id = "c", kind = "read", path = "C:\\r\\none.md", title = "x", key = "missing" })
+	h.fire(w.cx)
+
+	local okuma = w.sessions[2]
+	check.eq(okuma.name, "Okuma", "Okuma session created")
+	local tabs = {}
+	for _, t in w.tabs do
+		if t.session == okuma.id then
+			table.insert(tabs, t)
+		end
+	end
+	check.eq(#tabs, 1, "one tab: starting shell closed")
+	check.eq(tabs[1].doc, "C:\\r\\daily.md", "document opened")
+	check.eq(tabs[1].how, "tab", "as a new tab")
+	check.eq(tabs[1].name, "🧠 Günlük özet 19.11", "tab titled")
+	check.eq(w.current, 1, "user's session put back")
+	check.eq(w.focused, 100, "user's focus put back")
+	check.eq(w.toasts[1].text, "Okuma: 🧠 Günlük özet 19.11", "info toast")
+	check.eq(w.toasts[1].sub, "tern-bridge · hafiza", "toast sub line")
+	check.same(h.kv.read_seen, { "daily-2026-11-19" }, "key remembered")
+	local b = serde.decode("json", h.files["C:\\spool\\done\\20260101T000000-001-b.json"])
+	check.eq(b.result.duplicate, true, "same key not opened again")
+	local c = serde.decode("json", h.files["C:\\spool\\failed\\20260101T000000-002-c.json"])
+	check.truthy(string.find(c.error, "no such file", 1, true), "missing file failed")
+	check.same(h.kv.read_seen, { "daily-2026-11-19" }, "failed key not remembered")
+
+	-- Okuma exists and the user is elsewhere: opened in the user's session, moved out without reveal.
+	h.files["C:\\r\\other.md"] = "x"
+	job("20260101T000001-000-d.json", { v = 1, id = "d", kind = "read", path = "C:\\r\\other.md", title = "📥 Öneri", key = "inbox-1" })
+	h.fire(w.cx)
+	local last = w.tabs[#w.tabs]
+	check.eq(last.session, okuma.id, "moved into Okuma")
+	check.eq(last.moved_reveal.focus, false, "moved without focus")
+	check.eq(last.name, "📥 Öneri", "second tab titled")
+	check.eq(w.current, 1, "still in the user's session")
+	check.eq(w.focused, 100, "focus kept")
+end
+
 -- Another window holds a fresh lead: this one leaves the spool alone
 do
 	local h = stub.new(ROOT)
