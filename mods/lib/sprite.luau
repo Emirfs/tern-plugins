@@ -1,7 +1,7 @@
 --!strict
--- Hareketli GIF/WebP → tek sprite sheet planı. Tern CSS arka planında hareketli
--- görselin yalnız ilk karesini çizer ve bir görseli kenarı en çok 4096 px
--- olarak yükler; kareler bu sınıra sığan bir ızgaraya dizilir.
+-- Animated GIF/WebP → a single sprite sheet plan. In a CSS background Tern draws
+-- only the first frame of an animated image and loads an image with sides of at
+-- most 4096 px; the frames are laid out in a grid that fits this limit.
 
 local sprite = {}
 
@@ -14,7 +14,7 @@ export type Plan = {
 	fps: number,
 	cols: number,
 	rows: number,
-	-- Bir karenin piksel boyu (çift sayı: ffmpeg'in jpeg kodlayıcısı ister).
+	-- A frame's size in pixels (even numbers: ffmpeg's jpeg encoder requires it).
 	w: number,
 	h: number,
 }
@@ -24,8 +24,8 @@ local function even(n: number): number
 	return i - i % 2
 end
 
---- Kaynak boyu (`w`×`h`), saniye cinsinden süre ve kaynak kare hızından plan;
---- tek kareli ya da okunamayan girdi için nil.
+--- A plan from the source size (`w`×`h`), the duration in seconds and the source frame rate;
+--- nil for a single-frame or unreadable input.
 function sprite.plan(w: number, h: number, duration: number?, src_fps: number?, src_frames: number?): Plan?
 	if w <= 0 or h <= 0 then
 		return nil
@@ -43,7 +43,7 @@ function sprite.plan(w: number, h: number, duration: number?, src_fps: number?, 
 	if frames < 2 then
 		return nil
 	end
-	-- En geniş kareyi veren sütun sayısı.
+	-- The column count that gives the widest frame.
 	local best: Plan? = nil
 	for cols = 1, frames do
 		local rows = math.ceil(frames / cols)
@@ -57,7 +57,7 @@ function sprite.plan(w: number, h: number, duration: number?, src_fps: number?, 
 	return best
 end
 
---- ffprobe'un `r_frame_rate`/`avg_frame_rate` kesri ("15/1", "100/7") → sayı.
+--- ffprobe's `r_frame_rate`/`avg_frame_rate` fraction ("15/1", "100/7") → number.
 function sprite.rate(s: any): number?
 	if type(s) ~= "string" then
 		return nil

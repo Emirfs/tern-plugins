@@ -1,5 +1,5 @@
 --!strict
--- Depo kökünden: `lune run git-graph/tests/run.luau` (şerit yerleşimi, ayrıştırıcılar, gerçek git ile uçtan uca).
+-- From the repo root: `lune run git-graph/tests/run.luau` (lane layout, parsers, end to end with real git).
 local check = require("./check")
 require("./test_lanes")
 require("./test_parse")

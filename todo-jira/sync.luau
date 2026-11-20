@@ -53,7 +53,7 @@ function Sync.plan(issues: { Issue }, cards: { Card }, base: { [string]: Issue }
 		local card = byKey[if previous then previous.key else key]
 		if (previous and duplicate[previous.key]) or duplicate[key] or
 			(previous and previous.key ~= key and byKey[key] ~= nil) then
-			table.insert(conflicts, `{key}: panoda aynı Jira anahtarı birden fazla kartta.`)
+			table.insert(conflicts, `{key}: the same Jira key is on more than one card on the board.`)
 			continue
 		end
 		if not card then
@@ -64,12 +64,12 @@ function Sync.plan(issues: { Issue }, cards: { Card }, base: { [string]: Issue }
 			continue -- Local removal never deletes or updates a Jira issue.
 		end
 		if not previous and (card.title ~= remote.title or card.due ~= remote.due or card.lane ~= remote.lane) then
-			-- Eşitleme geçmişi olmayan kart: hangisinin doğru olduğu bilinmez, farkı alan alan söyle.
+			-- A card with no sync history: it is unknown which side is right, so report the difference field by field.
 			local diffs: { string } = {}
-			if card.title ~= remote.title then table.insert(diffs, `başlık “{card.title}” / “{remote.title}”`) end
-			if card.due ~= remote.due then table.insert(diffs, `termin “{card.due}” / “{remote.due}”`) end
-			if card.lane ~= remote.lane then table.insert(diffs, `sütun “{card.lane}” / “{remote.lane}”`) end
-			table.insert(conflicts, `{key}: panoda eşitlenmemiş kart (pano / Jira): {table.concat(diffs, ", ")}. Panoyu Jira’ya eşitleyin ya da kartı silip yenileyin.`)
+			if card.title ~= remote.title then table.insert(diffs, `title “{card.title}” / “{remote.title}”`) end
+			if card.due ~= remote.due then table.insert(diffs, `due date “{card.due}” / “{remote.due}”`) end
+			if card.lane ~= remote.lane then table.insert(diffs, `column “{card.lane}” / “{remote.lane}”`) end
+			table.insert(conflicts, `{key}: card on the board is not synced (board / Jira): {table.concat(diffs, ", ")}. Sync the board to Jira, or delete the card and refresh.`)
 			continue
 		end
 		local nextBase = table.clone(previous or remote)
@@ -92,9 +92,9 @@ function Sync.plan(issues: { Issue }, cards: { Card }, base: { [string]: Issue }
 					nextBase.status, nextBase.status_name = remote.status, remote.status_name
 				end
 			elseif (nextBase :: any)[field] ~= (remote :: any)[field] then
-				local label = if field == "title" then "başlık" elseif field == "due" then "termin" else "durum"
+				local label = if field == "title" then "title" elseif field == "due" then "due date" else "status"
 				local remoteValue = if field == "status" then remote.status_name else target
-				table.insert(conflicts, `{key} · {label}: panoda “{value}”, Jira’da “{remoteValue}”.`)
+				table.insert(conflicts, `{key} · {label}: “{value}” on the board, “{remoteValue}” in Jira.`)
 			elseif field ~= "status" or value == "Todo" or value == "Doing" or value == "Done" then
 				local change: Change = {issue = remote, card = card, field = field :: string, before = (remote :: any)[field], value = value :: string}
 				table.insert(changes, change)

@@ -1,41 +1,48 @@
 # Todo · Jira
 
-Mevcut Tern `~/TODO.md` panosunu kullanır; ayrı bir liste ve Jira kopyası oluşturmaz.
-Python 3 gerekir. `tern plugin link <clone>/todo-jira` ile kurulur. Eklentinin veri dizinindeki
-`config.json` içine `{"jira_url":"https://<site>.atlassian.net"}` yazın veya `TERN_JIRA_URL`
-verin. Jira e-posta ve API anahtarı sırayla iki ayrı satırda `~/.jira_token.txt` dosyasından
-okunur (`TERN_JIRA_CREDENTIAL_FILE` ile değişir). Anahtar eklenti ayarına, komut satırına veya
-önizlemeye konmaz. `TERN_TODO_PATH` farklı bir yerel Markdown panosu seçer.
+Uses Tern's existing `~/TODO.md` board; it does not create a separate list or a copy of Jira.
+Requires Python 3. Install with `tern plugin link <clone>/todo-jira`. Write
+`{"jira_url":"https://<site>.atlassian.net"}` into `config.json` in the plugin's data directory, or
+set `TERN_JIRA_URL`. The Jira e-mail and API token are read from `~/.jira_token.txt`, on two
+separate lines in that order (override the path with `TERN_JIRA_CREDENTIAL_FILE`). The token is
+never put in the plugin settings, the command line or a preview. `TERN_TODO_PATH` selects a
+different local Markdown board.
 
-- **Jira paneli (kartlar ve yorumlar)**: bu hesaba atanmış kartları ve her kartın bütün
-  yorumlarını (yazar, tarih, Markdown metin; senin yorumların “sen” ile işaretli, en yenisi üstte)
-  ayrı bir pane'de gösterir. Salt okunurdur, beş dakikada bir ve `r` ile yenilenir; `d` biten
-  kartları gösterir, `enter` veya çift tık kartı Jira'da açar. Satıra sağ tık: **AI’a ver**
-  (aşağıdaki Kanban akışını o kartla açar), **Jira’da aç**, **Bağlantıyı kopyala**.
-- **Jira’dan yenile**: bağlı hesaba atanmış kartları `Todo`, `Doing`, `Done` sütunlarına alır.
-  Sonraki değişiklikleri ana pencere beş dakikada bir Jira'dan okuyup panoya işler; bu arka plan
-  eşitlemesi durursa hata bir kez bildirilir.
-- **Değişiklikler**: panoda değişen başlık, termin veya durum için hedefi ve değeri gösterir.
-  Durum için Jira’nın o an izin verdiği geçişi seçin. Her alan ancak **Jira’ya gönder** ile yazılır.
-  İki tarafta değişen alanlar ezilmez; bunu çözmek için panodaki alanı bildirilen Jira değerine
-  getirin ve gerekiyorsa düzenlemeyi yeniden yapın. Sütun içi sıra, yerel etiketler ve notlar
-  Jira’ya gönderilmez. Kartı yerelde silmek Jira kartını silmez; atama kapsamı dışında kalan
-  kartın yerel notlarına dokunulmaz.
-- **AI’a ata / Kanban’a ekle**: yerel veya bağlı TODO kartını seçin (ya da Jira panelinde sağ tık
-  **AI’a ver**), isteğe bağlı AI profilini seçin; tek Hermes panosu varsa pano sorulmaz. Jira
-  kartında göreve kartın Jira'daki açıklaması ve son üç yorumu eklenir. Hermes, onaylanan atamayı
-  kendi yürütür; atamasız kart panoya eklenir. Aynı kart, profil ve bağlam için Hermes yeni görev
-  açmaz, mevcut görevi döndürür; bildirim o görevin durumunu söyler.
-- **Hafıza kasası**: her eşitlemede atanmış her kart için ortak hafıza kasasında
-  `jira/<KEY>.md` notu tutulur (varsayılan `~/GitHub/araclar/hafiza`; `config.json` içinde `vault`
-  ya da `TERN_HAFIZA_DIR`). Eklenti yalnız frontmatter'ı ve **Sent to Jira** bölümünü (Jira'daki
-  yorumların) Jira'dan yeniden yazar; Summary, Log, Open, Decisions ve Jira draft bölümleri senin ve
-  ajanlarındır, dokunulmaz. Değişen notlar kasa bir git deposuysa tek commit'le kaydedilir. Jira
-  panelinde kartın dolu bölümleri görünür; sağ tık **Hafıza notunu aç** dosyayı açar.
-- **Değişiklikler** ve **Doldur**: notun **Jira draft** bölümü doluysa o metin (Markdown) kartın
-  ilerleme yorumu olarak önerilir. **Doldur · Bu metni Jira’ya gönder** onaydan sonra Jira'ya
-  ekler, açıklamayı veya durumu değiştirmez; aynı metin zaten varsa tekrar göndermez. Gönderilen
-  taslak notta temizlenir ve **Sent to Jira** listesine geçer. Carly’ye **doldur** demek de
-  önizlemeyi açar; seçicide onay vermeden yazmaz.
+![The Jira pane with sample cards: the card list, and the selected card's memory note, description and comments](docs/screenshot.webp)
 
-Canlı Jira ve Hermes’e yazmadan doğrulama: `python -B -m unittest discover -s todo-jira/tests`.
+- **Jira pane (cards and comments)**: shows the cards assigned to this account and every comment on
+  each card (author, date, Markdown text; your own comments are marked "you", newest first) in a
+  separate pane. It is read-only and refreshes every five minutes and on `r`; `d` shows finished
+  cards, and `enter` or a double click opens the card in Jira. Right-click a row for **Hand to AI**
+  (opens the Kanban flow below with that card), **Open in Jira**, **Copy link** and **Open memory
+  note**.
+- **Refresh from Jira**: puts the cards assigned to the linked account into the `Todo`, `Doing` and
+  `Done` columns. Afterwards the main window reads Jira every five minutes and applies later
+  changes to the board; if this background sync stops, the error is reported once.
+- **Changes**: for a title, due date or status that changed on the board, shows the target and the
+  value. For a status, pick the transition Jira currently allows. Every field is written only with
+  **Send to Jira**. Fields changed on both sides are not overwritten; to resolve one, set the
+  field on the board to the reported Jira value and redo the edit if needed. Order within a column,
+  local labels and notes are not sent to Jira. Deleting a card locally does not delete the Jira
+  card; local notes of a card that falls out of the assignment scope are left untouched.
+- **Assign to AI / Add to Kanban**: pick a local or linked TODO card (or right-click **Hand to AI**
+  in the Jira pane) and optionally an AI profile; with a single Hermes board the board is not
+  asked. For a Jira card the task gets the card's Jira description and its last three comments.
+  Hermes runs an approved assignment itself; a card without an assignee is only added to the board.
+  For the same card, profile and context Hermes does not open a new task but returns the existing
+  one; the notification reports that task's status.
+- **Memory vault**: on every sync a `jira/<KEY>.md` note is kept for each assigned card in the
+  shared memory vault (default `~/GitHub/araclar/hafiza`; `vault` in `config.json` or
+  `TERN_HAFIZA_DIR`). The plugin rewrites only the frontmatter and the **Sent to Jira** section
+  (your Jira comments) from Jira; the Summary, Log, Open, Decisions and Jira draft sections belong
+  to you and your agents and are never touched. If the vault is a git repository, changed notes are
+  saved in a single commit. The Jira pane shows a card's filled sections; right-click **Open memory
+  note** opens the file.
+- **Changes** and **Fill**: when the note's **Jira draft** section is filled, that text (Markdown)
+  is offered as the card's progress comment. **Fill · Send this text to Jira** adds it to Jira after
+  approval; it does not change the description or the status, and it does not send the text again
+  if the same text is already there. The sent draft is cleared in the note and moves to the **Sent
+  to Jira** list. Telling Carly **fill** also opens the preview; nothing is written without your
+  approval in the picker.
+
+Verification without writing to live Jira or Hermes: `python -B -m unittest discover -s todo-jira/tests`.

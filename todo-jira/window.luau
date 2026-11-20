@@ -11,7 +11,7 @@ local boardPath = tern.getenv("TERN_TODO_PATH") or (home .. "/TODO.md")
 local refreshMs = 5 * 60 * 1000
 local issues: {Issue} = {}
 local drafts: {Draft} = {}
--- Süren eşitleme ya da yazma. Pencere kapanınca geri çağrı hiç gelmeyebilir: bayrak süreyle düşer.
+-- A sync or write in progress. The callback may never arrive once the window closes: the flag expires after a timeout.
 local busyUntil = 0
 local BUSY_MS = 3 * 60 * 1000
 local alerted = ""
@@ -37,7 +37,7 @@ local function backend(cx: WindowCx, data: any, cb: (WindowCx, any, string?) -> 
 		end)
 	end)
 	if not ok then
-		cb(cx, nil, `Todo bağlantısı başlatılamadı: {err}`)
+		cb(cx, nil, `Could not start the Todo connection: {err}`)
 	end
 end
 
@@ -45,9 +45,9 @@ local function readBoard(cx: WindowCx, cb: (WindowCx, {Card}?, {[string]: string
 	cx.board:read(boardPath, {rows = 500, max_chars = 4096}):next(function(snapshot, err, fresh)
 		if not fresh then return end
 		if not snapshot or snapshot.phase ~= "ready" then
-			cb(fresh, nil, nil, err or "TODO panosu henüz hazır değil.")
+			cb(fresh, nil, nil, err or "The TODO board is not ready yet.")
 		elseif snapshot.more > 0 or snapshot.open + snapshot.done > 500 then
-			cb(fresh, nil, nil, "TODO panosu 500 kartı geçti. Eksik veriyle eşitleme yapılmadı.")
+			cb(fresh, nil, nil, "The TODO board has more than 500 cards. Not synced, to avoid working with partial data.")
 		else
 			local cards, lanes = sync.cards(snapshot)
 			cb(fresh, cards, lanes, nil)
@@ -67,7 +67,7 @@ local function applyBoard(cx: WindowCx, lanes: {[string]: string}, edits: {sync.
 		local due: (string | false)? = if edit.due == "" then false else edit.due
 		local function complete(result: any, err: string?, current: WindowCx?)
 			if not current then return end
-			if err or not result then done(current, err or "Pano değişikliği kaydedilemedi."); return end
+			if err or not result then done(current, err or "Could not save the board change."); return end
 			step(current)
 		end
 		if edit.card then
@@ -82,7 +82,7 @@ local function applyBoard(cx: WindowCx, lanes: {[string]: string}, edits: {sync.
 			if title or due ~= nil then
 				fresh.board:edit(card.id, {text = title, due = due}):next(function(result, err, current)
 					if not current then return end
-					if err or not result then done(current, err or "Kart düzenlenemedi.") else move(current) end
+					if err or not result then done(current, err or "Could not edit the card.") else move(current) end
 				end)
 			else
 				move(fresh)
@@ -98,11 +98,11 @@ local function applyBoard(cx: WindowCx, lanes: {[string]: string}, edits: {sync.
 		if not edit then done(fresh, nil); return end
 		local lane = edit.lane
 		if lane and lanes[lane] == "" then
-			done(fresh, `Birden fazla “{lane}” sütunu var; eşitleme durdu.`)
+			done(fresh, `There is more than one “{lane}” column; sync stopped.`)
 		elseif lane and not lanes[lane] then
 			fresh.board:add_lane(boardPath, {title = lane}):next(function(id, err, current)
 				if not current then return end
-				if not id then done(current, err or "Sütun açılamadı."); return end
+				if not id then done(current, err or "Could not create the column."); return end
 				lanes[lane] = id
 				nextEdit(current, edit)
 			end)
@@ -114,13 +114,13 @@ local function applyBoard(cx: WindowCx, lanes: {[string]: string}, edits: {sync.
 end
 
 local function scanMemory(cx: WindowCx, notify: boolean, done: (WindowCx, string?) -> ())
-	-- Kasadaki kart notları Jira'dan tazelenir; "Jira draft" bölümü dolu kartlar öneri olur.
+	-- The card notes in the vault are refreshed from Jira; cards with a filled "Jira draft" section become suggestions.
 	backend(cx, {op = "memory"}, function(fresh, data, err)
 		if not err then
 			drafts = data.drafts
 			local warning = data.warning or ""
 			if warning ~= "" and warning ~= vaultWarning then
-				fresh:toast("error", "Todo · Jira hafıza kasası", warning)
+				fresh:toast("error", "Todo · Jira memory vault", warning)
 			end
 			vaultWarning = warning
 			local ids = {}
@@ -128,7 +128,7 @@ local function scanMemory(cx: WindowCx, notify: boolean, done: (WindowCx, string
 			table.sort(ids)
 			local current = table.concat(ids, ":")
 			if notify and current ~= "" and current ~= alerted then
-				fresh:toast("info", `Todo · Jira: {#drafts} Jira yorum taslağı hazır`, "Doldur ile önizle; Jira’ya henüz yazılmadı.")
+				fresh:toast("info", `Todo · Jira: {#drafts} Jira comment drafts ready`, "Preview them with Fill; nothing has been written to Jira yet.")
 			end
 			alerted = current
 			tern.chrome.refresh()
@@ -139,24 +139,24 @@ end
 
 local function refresh(cx: WindowCx, quiet: boolean, done: ((WindowCx, {Change}, {string}) -> ())?)
 	if isBusy() then
-		if not quiet then cx:toast("info", "Todo · Jira eşitlemesi sürüyor.") end
+		if not quiet then cx:toast("info", "Todo · Jira sync in progress.") end
 		return
 	end
 	setBusy(true)
 	local function fail(fresh: WindowCx, err: string)
 		setBusy(false)
 		if not quiet then
-			fresh:toast("error", "Todo · Jira yenilenemedi", err)
+			fresh:toast("error", "Todo · Jira refresh failed", err)
 		elseif err ~= backgroundError then
-			-- Arka plan eşitlemesi sessizce ölmesin: her yeni hata bir kez gösterilir.
+			-- A background sync must not die silently: each new error is shown once.
 			backgroundError = err
-			fresh:toast("error", "Todo · Jira arka plan eşitlemesi durdu", err)
+			fresh:toast("error", "Todo · Jira background sync stopped", err)
 		end
 	end
 	backend(cx, {op = "assigned"}, function(fresh, assigned, err)
 		if err then fail(fresh, err); return end
 		readBoard(fresh, function(now, cards, lanes, boardErr)
-			if not cards or not lanes then fail(now, boardErr or "TODO panosu okunamadı."); return end
+			if not cards or not lanes then fail(now, boardErr or "Could not read the TODO board."); return end
 			local edits, changes, conflicts, baseline = sync.plan(assigned, cards, tern.kv.get("jira-baseline") or {})
 			applyBoard(now, lanes, edits, function(current, writeErr)
 				if writeErr then fail(current, writeErr); return end
@@ -165,11 +165,11 @@ local function refresh(cx: WindowCx, quiet: boolean, done: ((WindowCx, {Change},
 				scanMemory(current, quiet, function(last, memoryErr)
 					setBusy(false)
 					backgroundError = ""
-					if memoryErr and not quiet then last:toast("error", "Hafıza önizlemesi yenilenemedi", memoryErr) end
+					if memoryErr and not quiet then last:toast("error", "Could not refresh the memory preview", memoryErr) end
 					if done then
 						done(last, changes, conflicts)
 					elseif not quiet then
-						last:toast("success", `{#assigned} Jira kartı · {#edits} pano güncellemesi`, `{#changes} gönderilebilir düzenleme · {#conflicts} çakışma`)
+						last:toast("success", `{#assigned} Jira cards · {#edits} board updates`, `{#changes} sendable edits · {#conflicts} conflicts`)
 					end
 				end)
 			end)
@@ -191,36 +191,36 @@ local function approve(cx: WindowCx, title: string, action: string, details: {Pi
 end
 
 local function jiraWrite(cx: WindowCx, data: any, cb: (WindowCx, any) -> ())
-	if isBusy() then cx:toast("info", "Todo · Jira eşitlemesi sürüyor."); return end
+	if isBusy() then cx:toast("info", "Todo · Jira sync in progress."); return end
 	setBusy(true)
 	backend(cx, data, function(fresh, reply, err)
 		setBusy(false)
-		if err then fresh:toast("error", "Jira’ya gönderilemedi", err) else cb(fresh, reply) end
+		if err then fresh:toast("error", "Could not send to Jira", err) else cb(fresh, reply) end
 	end)
 end
 
 local function sendChange(cx: WindowCx, change: Change, value: string, name: string)
 	local issue = change.issue
 	local old = if change.field == "status" then issue.status_name else change.before
-	approve(cx, issue.key .. " · Jira’ya gönder", "Jira’ya gönder", {
-		{label = "Önce: " .. (old ~= "" and old or "—")},
-		{label = "Sonra: " .. (name ~= "" and name or "—")},
+	approve(cx, issue.key .. " · Send to Jira", "Send to Jira", {
+		{label = "Before: " .. (old ~= "" and old or "—")},
+		{label = "After: " .. (name ~= "" and name or "—")},
 	}, function(fresh)
 		readBoard(fresh, function(current, cards, _, err)
-			if not cards then current:toast("error", "TODO okunamadı", err); return end
+			if not cards then current:toast("error", "Could not read TODO", err); return end
 			local _, pending = sync.plan(issues, cards, tern.kv.get("jira-baseline") or {})
 			for _, candidate in pending do
 				if candidate.issue.id == issue.id and candidate.field == change.field and candidate.before == change.before
 					and candidate.value == change.value and candidate.card.id == change.card.id then
 					jiraWrite(current, {op = "change", key = issue.key, id = issue.id, field = change.field,
 						before = change.before, value = value, lane = change.value}, function(last, _)
-						last:toast("success", issue.key .. " Jira’da güncellendi.")
+						last:toast("success", issue.key .. " updated in Jira.")
 						refresh(last, true, nil)
 					end)
 					return
 				end
 			end
-			current:toast("error", "Düzenleme değişti; yeniden önizleyin.")
+			current:toast("error", "The edit changed; preview it again.")
 		end)
 	end)
 end
@@ -229,18 +229,18 @@ local function showChange(cx: WindowCx, change: Change)
 	if change.field ~= "status" then sendChange(cx, change, change.value, change.value); return end
 	local issue = change.issue
 	backend(cx, {op = "transitions", key = issue.key, id = issue.id, before = change.before, lane = change.value}, function(fresh, data, err)
-		if err then fresh:toast("error", "Jira durumları alınamadı", err); return end
+		if err then fresh:toast("error", "Could not get the Jira statuses", err); return end
 		local rows: {PickItem} = {}
 		for _, t in data do table.insert(rows, {label = t.name, detail = t.action, id = t.id}) end
-		if #rows == 0 then fresh:toast("info", issue.key .. " için bu sütuna Jira geçişi yok."); return end
-		pick(fresh, issue.key .. " · Jira durumu", rows, function(current, row)
+		if #rows == 0 then fresh:toast("info", `No Jira transition to this column for {issue.key}.`); return end
+		pick(fresh, issue.key .. " · Jira status", rows, function(current, row)
 			sendChange(current, change, row.id, row.label)
 		end)
 	end)
 end
 
 local function showDraft(cx: WindowCx, draft: Draft)
-	-- Taslak Markdown: satır yapısı korunur, uzun satırlar 80 karakterde bölünür.
+	-- Draft Markdown: the line structure is kept, long lines are wrapped at 80 characters.
 	local details: {PickItem} = {}
 	for raw in string.gmatch(draft.text .. "\n", "([^\n]*)\n") do
 		local line = ""
@@ -253,19 +253,19 @@ local function showDraft(cx: WindowCx, draft: Draft)
 		end
 		if line ~= "" and line ~= "  " then table.insert(details, {label = line}) end
 	end
-	approve(cx, draft.key .. " · Özel önizleme · Jira ilerleme yorumu", "Doldur · Bu metni Jira’ya gönder", details, function(fresh)
+	approve(cx, draft.key .. " · Draft preview · Jira progress comment", "Fill · Send this text to Jira", details, function(fresh)
 		for _, current in drafts do
 			if current.id == draft.id and current.digest == draft.digest then
 				jiraWrite(fresh, {op = "comment", key = draft.key, id = draft.id, text = draft.text}, function(last, _)
-					-- Gönderilen taslak kasadaki notta temizlendi; bir sonraki eşitleme "Sent to Jira"ya ekler.
+					-- The sent draft was cleared in the vault note; the next sync adds it to "Sent to Jira".
 					for i, item in drafts do if item == current then table.remove(drafts, i); break end end
 					tern.chrome.refresh()
-					last:toast("success", draft.key .. " ilerleme yorumu Jira’da doğrulandı.")
+					last:toast("success", draft.key .. " progress comment verified in Jira.")
 				end)
 				return
 			end
 		end
-		fresh:toast("info", "Bu önizleme değişti; yeniden açın.")
+		fresh:toast("info", "This preview changed; open it again.")
 	end)
 end
 
@@ -273,17 +273,17 @@ local function preview(cx: WindowCx, memoryOnly: boolean)
 	refresh(cx, false, function(fresh, changes, conflicts)
 		local rows: {PickItem} = {}
 		for _, draft in drafts do
-			table.insert(rows, {label = draft.key, detail = draft.text, group = "Hafıza · özel önizlemeler", draft = draft})
+			table.insert(rows, {label = draft.key, detail = draft.text, group = "Memory · draft previews", draft = draft})
 		end
 		if not memoryOnly then
 			for _, change in changes do
-				local label = if change.field == "title" then "Başlık" elseif change.field == "due" then "Termin" else "Durum"
-				table.insert(rows, {label = change.issue.key .. " · " .. label, detail = change.value, group = "Jira’ya gönderilebilir", change = change})
+				local label = if change.field == "title" then "Title" elseif change.field == "due" then "Due date" else "Status"
+				table.insert(rows, {label = change.issue.key .. " · " .. label, detail = change.value, group = "Can be sent to Jira", change = change})
 			end
-			for _, conflict in conflicts do table.insert(rows, {label = conflict, group = "Çakışmalar · hiçbir şey yazılmadı"}) end
+			for _, conflict in conflicts do table.insert(rows, {label = conflict, group = "Conflicts · nothing was written"}) end
 		end
-		if #rows == 0 then fresh:toast("info", "Gönderilecek önemli değişiklik yok."); return end
-		pick(fresh, "Todo · Jira · Değişiklikler", rows, function(current, row)
+		if #rows == 0 then fresh:toast("info", "No notable changes to send."); return end
+		pick(fresh, "Todo · Jira · Changes", rows, function(current, row)
 			if row.draft then showDraft(current, row.draft) elseif row.change then showChange(current, row.change) end
 		end)
 	end)
@@ -291,56 +291,56 @@ end
 
 local function assignCard(cx: WindowCx, card: Card)
 	backend(cx, {op = "kanban-options"}, function(now, data, why)
-		if why then now:toast("error", "Hermes panoları alınamadı", why); return end
+		if why then now:toast("error", "Could not get the Hermes boards", why); return end
 		local boards: {PickItem} = {}
 		for _, board in data.boards do table.insert(boards, {label = board.name, detail = board.slug, slug = board.slug}) end
-		if #boards == 0 then now:toast("info", "Kullanılabilir Hermes panosu yok."); return end
+		if #boards == 0 then now:toast("info", "No Hermes board available."); return end
 		local function withBoard(dest: WindowCx, board: PickItem)
-			local profiles: {PickItem} = {{label = "Atamadan ekle", name = ""}}
+			local profiles: {PickItem} = {{label = "Add without an assignee", name = ""}}
 			for _, name in data.profiles do table.insert(profiles, {label = name, name = name}) end
-			pick(dest, "Hermes AI profili · atanan kart otomatik çalışır", profiles, function(target, profile)
-				local source = if card.key then "Jira kartı: " .. card.key else "Kaynak: Tern TODO.md"
+			pick(dest, "Hermes AI profile · an assigned card runs automatically", profiles, function(target, profile)
+				local source = if card.key then "Jira card: " .. card.key else "Source: Tern TODO.md"
 				local details: {PickItem} = {{label = card.text}, {label = "AI: " .. profile.label}}
 				if card.key then
-					table.insert(details, {label = "Göreve Jira açıklaması ve son 3 yorum eklenir"})
+					table.insert(details, {label = "The Jira description and the last 3 comments are added to the task"})
 				end
-				approve(target, "Hermes Kanban · " .. board.label, "Kanban’a gönder", details, function(confirmed)
+				approve(target, "Hermes Kanban · " .. board.label, "Send to Kanban", details, function(confirmed)
 					backend(confirmed, {op = "kanban-create", board = board.slug, assignee = profile.name, key = card.key,
 						title = card.text, identity = boardPath .. "\0" .. (card.key or card.text),
-						body = source .. "\n\nSeçilen görev: " .. card.title .. "\n\nJira’ya yazma, mesaj gönderme veya cihaz işlemi ayrıca kullanıcı onayı gerektirir.",
+						body = source .. "\n\nSelected task: " .. card.title .. "\n\nWriting to Jira, sending messages or any device action needs separate user approval.",
 					}, function(last, result, sendErr)
-						if sendErr then last:toast("error", "Kanban’a eklenemedi", sendErr); return end
+						if sendErr then last:toast("error", "Could not add to Kanban", sendErr); return end
 						local status = tostring(result.status or "?")
-						-- Aynı kart, profil ve bağlam için Hermes yeni görev açmaz, eskisini döndürür.
+						-- For the same card, profile and context Hermes does not open a new task; it returns the existing one.
 						if status == "done" or status == "blocked" or status == "archived" then
-							last:toast("info", `Bu görev zaten var: {result.id} ({status})`, "Kartta yeni yorum ya da açıklama yoksa Hermes aynı görevi döndürür.")
+							last:toast("info", `This task already exists: {result.id} ({status})`, "Unless the card has a new comment or description, Hermes returns the same task.")
 						else
-							last:toast("success", "Hermes Kanban görevi hazır", `{result.id} · {status}` .. (if result.assignee then ` · {result.assignee}` else ""))
+							last:toast("success", "Hermes Kanban task ready", `{result.id} · {status}` .. (if result.assignee then ` · {result.assignee}` else ""))
 						end
 					end)
 				end)
 			end)
 		end
-		-- Tek pano varken seçici sormaz.
-		if #boards == 1 then withBoard(now, boards[1]) else pick(now, "Hermes Kanban panosu", boards, withBoard) end
+		-- With a single board the picker is not shown.
+		if #boards == 1 then withBoard(now, boards[1]) else pick(now, "Hermes Kanban board", boards, withBoard) end
 	end)
 end
 
 local function kanban(cx: WindowCx, key: string?)
 	readBoard(cx, function(fresh, cards, _, err)
-		if not cards then fresh:toast("error", "TODO okunamadı", err); return end
+		if not cards then fresh:toast("error", "Could not read TODO", err); return end
 		if key then
 			for _, card in cards do
 				if card.key == key then assignCard(fresh, card); return end
 			end
-			-- Panoda olmayan (ör. yerelde silinmiş) Jira kartı: başlığı Jira bağlamı tamamlar.
+			-- A Jira card missing from the board (e.g. deleted locally): the Jira context completes its title.
 			assignCard(fresh, {id = "", text = `[{key}]`, title = key, due = "", lane = "", key = key})
 			return
 		end
 		local rows: {PickItem} = {}
 		for _, card in cards do table.insert(rows, {label = card.text, detail = card.lane, card = card}) end
-		if #rows == 0 then fresh:toast("info", "Atanacak TODO kartı yok."); return end
-		pick(fresh, "Hermes Kanban’a gönderilecek TODO kartı", rows, function(current, item)
+		if #rows == 0 then fresh:toast("info", "No TODO card to assign."); return end
+		pick(fresh, "TODO card to send to Hermes Kanban", rows, function(current, item)
 			assignCard(current, item.card)
 		end)
 	end)
@@ -356,17 +356,17 @@ local function openPane(cx: WindowCx)
 		end
 	end
 	if cx:new_block(PANE_KIND, nil, "beside") == nil then
-		cx:toast("error", "Jira paneli açılamadı", "Eklentinin host yarısı yüklenmemiş; `tern plugin list` ile durumuna bakın.")
+		cx:toast("error", "Could not open the Jira pane", "The plugin's host half is not loaded; check its state with `tern plugin list`.")
 	end
 end
 
-tern.command({id = "pull", title = "Todo · Jira: Jira’dan yenile", run = function(cx) refresh(cx, false, nil) end})
-tern.command({id = "board", title = "Todo · Jira: Jira paneli (kartlar ve yorumlar)", run = openPane})
-tern.command({id = "changes", title = "Todo · Jira: Değişiklikler", run = function(cx) preview(cx, false) end})
-tern.command({id = "fill", title = "Todo · Jira: Doldur", run = function(cx) preview(cx, true) end})
-tern.command({id = "kanban", title = "Todo · Jira: AI’a ata / Kanban’a ekle", run = function(cx) kanban(cx, nil) end})
+tern.command({id = "pull", title = "Todo · Jira: Refresh from Jira", run = function(cx) refresh(cx, false, nil) end})
+tern.command({id = "board", title = "Todo · Jira: Jira pane (cards and comments)", run = openPane})
+tern.command({id = "changes", title = "Todo · Jira: Changes", run = function(cx) preview(cx, false) end})
+tern.command({id = "fill", title = "Todo · Jira: Fill", run = function(cx) preview(cx, true) end})
+tern.command({id = "kanban", title = "Todo · Jira: Assign to AI / Add to Kanban", run = function(cx) kanban(cx, nil) end})
 
--- Jira panelinin sağ tık "AI’a ver" isteği (host yarısı kv'ye yazar). Açılışta duran istek eskidir, işlenmez.
+-- The Jira pane's right-click "Hand to AI" request (the host half writes it to kv). A request left over at startup is stale and is ignored.
 local handledRequest: string? = nil
 do
 	local req = tern.kv.get("ai-request")
@@ -383,17 +383,17 @@ local function watchRequests(cx: WindowCx?)
 end
 tern.timer(700, watchRequests)
 
-tern.carly.export("doldur", {
-	sig = "doldur() -> string",
-	doc = "Kullanıcı 'doldur' dediğinde özel Todo · Jira önizlemesini açar. Jira’ya yazmaz; kullanıcı kartı ve tam metni seçicide onaylar.",
+tern.carly.export("fill", {
+	sig = "fill() -> string",
+	doc = "Opens the private Todo · Jira draft preview when the user says 'fill'. It does not write to Jira; the user approves the card and the full text in the picker.",
 }, function(cx: WindowCx, _call: ExportCall)
 	preview(cx, true)
-	return "Özel önizleme istendi; hiçbir kart otomatik doldurulmadı."
+	return "Draft preview requested; no card was filled in automatically."
 end)
 
 tern.chrome.status(function(_pane)
 	if #drafts == 0 then return nil end
-	return {{text = `Todo · {#drafts} önemli değişiklik`, command = "plugin.todo-jira.changes"}}
+	return {{text = `Todo · {#drafts} to review`, command = "plugin.todo-jira.changes"}}
 end)
 
 local function tick(cx: WindowCx?)

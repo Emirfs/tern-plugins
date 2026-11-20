@@ -1,5 +1,5 @@
 --!strict
--- Blok uçtan uca: host.luau taklit çalışma zamanında, süreç sonuçlarını test verir.
+-- Block end to end: host.luau under a stub runtime; the test supplies the process results.
 local check = require("./check")
 local fixture = require("./fixture")
 local stub = require("./host_stub")
@@ -15,10 +15,9 @@ local function view_text(h: stub.Harness, state: any): string
 	return stub.text(h.blocks.accounts.view(state, h.cx).main)
 end
 
--- Önbellek ilk çekimden önce çizer; başarısız profil eski verisini tutar
+-- The cache draws before the first fetch; a failing profile keeps its old data
 do
 	local h = stub.host(ROOT, { "work" })
-	h.kv.lang = "tr"
 	h.kv.cache = {
 		v = 1,
 		fetched = 1000,
@@ -32,8 +31,8 @@ do
 	check.eq(#h.procs, 2, "one omp run per profile")
 	local first = view_text(h, state)
 	check.truthy(string.find(first, "Claude", 1, true), "cached accounts are drawn before omp answers")
-	check.truthy(string.find(first, "(önbellek)", 1, true), "cached data is marked")
-	check.eq(h.blocks.accounts.title(state), "omp kullanım · 3 hesap", "title counts cached accounts once across profiles")
+	check.truthy(string.find(first, "(cached)", 1, true), "cached data is marked")
+	check.eq(h.blocks.accounts.title(state), "omp usage · 3 accounts", "title counts cached accounts once across profiles")
 
 	local default_proc, work_proc = h.procs[1], h.procs[2]
 	check.eq(default_proc.env.OMP_PROFILE, "default", "default profile env")
@@ -44,10 +43,10 @@ do
 	check.eq(h.renders, 1, "renders once when every profile settled")
 
 	local after = view_text(h, state)
-	check.eq(string.find(after, "(önbellek)", 1, true), nil, "fresh fetch clears the cache mark")
-	check.truthy(string.find(after, "work: omp çıkış kodu 1: boom", 1, true), "failure is reported with its first stderr line")
-	check.truthy(string.find(after, "verisi gösteriliyor", 1, true), "failed profile says it shows older data")
-	check.eq(h.blocks.accounts.title(state), "omp kullanım · 3 hesap", "failed profile keeps its last accounts")
+	check.eq(string.find(after, "(cached)", 1, true), nil, "fresh fetch clears the cache mark")
+	check.truthy(string.find(after, "work: omp exited with 1: boom", 1, true), "failure is reported with its first stderr line")
+	check.truthy(string.find(after, "showing data from", 1, true), "failed profile says it shows older data")
+	check.eq(h.blocks.accounts.title(state), "omp usage · 3 accounts", "failed profile keeps its last accounts")
 
 	local cache = h.kv.cache
 	check.eq(cache.v, 1, "cache rewritten")
@@ -55,15 +54,15 @@ do
 	check.eq(cache.profiles.default.data.capacity, nil, "cache holds the trimmed output")
 end
 
--- Bozuk önbellek yok sayılır
+-- A corrupt cache is ignored
 do
 	local h = stub.host(ROOT, {})
 	h.kv.cache = { v = 99, profiles = "junk" }
 	local state = h.blocks.accounts.init(h.cx, {}, nil)
-	check.truthy(string.find(view_text(h, state), "omp profillerinden", 1, true) or string.find(view_text(h, state), "Reading usage", 1, true), "unknown cache version shows the loading state")
+	check.truthy(string.find(view_text(h, state), "Reading usage", 1, true), "unknown cache version shows the loading state")
 end
 
--- Windows'ta omp adayları: PATH'teki ad, sonra yalnız Windows yolları
+-- omp candidates on Windows: the name on PATH, then Windows paths only
 do
 	local bun = "C:\\home\\.bun\\bin\\omp.exe"
 	local h = stub.host(ROOT, {}, { bun })
@@ -76,21 +75,20 @@ do
 	end
 end
 
--- omp hiç yoksa sebebi gösterilir
+-- If omp is missing at all, the reason is shown
 do
 	local h = stub.host(ROOT, {})
 	h.missing.omp = true
-	h.kv.lang = "en"
 	local state = h.blocks.accounts.init(h.cx, {}, nil)
 	check.truthy(string.find(view_text(h, state), "default: omp failed to start", 1, true), "spawn failure is reported")
 end
 
--- l dili değiştirir ve kaydeder
+-- Only r and R are keys; l (the old language switch) and ctrl combinations are not handled
 do
 	local h = stub.host(ROOT, {})
-	h.kv.lang = "tr"
 	local state = h.blocks.accounts.init(h.cx, {}, nil)
-	check.eq(h.blocks.accounts.key(state, key("l"), h.cx), true, "l is handled")
-	check.eq(h.kv.lang, "en", "language toggled and saved")
-	check.eq(h.blocks.accounts.key(state, { name = "l", ctrl = true }, h.cx), false, "ctrl+l is not ours")
+	check.eq(h.blocks.accounts.key(state, key("r"), h.cx), true, "r is handled")
+	check.eq(h.blocks.accounts.key(state, key("R"), h.cx), true, "R is handled")
+	check.eq(h.blocks.accounts.key(state, key("l"), h.cx), false, "l is not handled")
+	check.eq(h.blocks.accounts.key(state, { name = "r", ctrl = true }, h.cx), false, "ctrl+r is not ours")
 end

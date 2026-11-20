@@ -1,9 +1,9 @@
 --!strict
--- Host yarısı: `panel` bloğu (Görünüm ve Modlar sekmeli ayar sayfası) ve
--- duvar kağıdı için hareketli GIF/WebP'yi ffmpeg ile sprite sheet'e çevirme.
--- Ayarlar kv'ye yazılır; pencere yarısı kv'yi izleyip CSS'i uygular.
+-- Host half: the `panel` block (the tabbed Appearance and Mods settings page) and
+-- converting an animated GIF/WebP into a sprite sheet with ffmpeg for the wallpaper.
+-- Settings are written to kv; the window half watches kv and applies the CSS.
 
-local i18n = require("./lib/i18n")
+local strings = require("./lib/strings")
 local panel = require("./lib/panel")
 local registry = require("./lib/registry")
 local appearance = require("./lib/appearance")
@@ -22,7 +22,7 @@ local function home(): string?
 	return tern.getenv("USERPROFILE") or tern.getenv("HOME")
 end
 
--- omp profilleri: `~/.omp/agent` varsa default, artı `~/.omp/profiles/*`.
+-- omp profiles: `~/.omp/agent` counts as default, plus `~/.omp/profiles/*`.
 local function profiles(): { string }
 	local out: { string } = {}
 	local h = home()
@@ -53,7 +53,7 @@ local function user_mods(): { registry.UserMod }
 	return registry.user_mods(if ok then files else {}, read_head)
 end
 
--- Duvar kağıdının görsel satırının notu: hazırlanıyor, kare sayısı ya da hata.
+-- Note under the wallpaper's image row: preparing, frame count, or an error.
 local function image_note(L: { [string]: string }): string?
 	local a = tern.kv.get("wp_anim")
 	local cfg = registry.settings(registry.builtin("wallpaper") :: any, tern.kv.get(registry.KEY_CFG))
@@ -71,25 +71,22 @@ local function image_note(L: { [string]: string }): string?
 end
 
 local function data(): panel.Data
-	local lang: i18n.Lang = i18n.current(tern)
 	return {
-		lang = lang,
 		on = registry.enabled(tern.kv.get(registry.KEY_ON)),
 		cfg = tern.kv.get(registry.KEY_CFG),
 		look = appearance.normalize(tern.kv.get(registry.KEY_LOOK)),
 		user = user_mods(),
 		user_dir = USER_DIR,
 		profiles = profiles(),
-		image_note = image_note(i18n.strings(lang)),
+		image_note = image_note(strings.text),
 	}
 end
 
--- Panelin dışarıdan değişebilen her şeyi (palet komutları, öbür pencereler,
--- kullanıcı klasörü, sprite dönüşümü): değişince panel yeniden çizilir.
+-- Everything about the panel that can change from outside (palette commands, other
+-- windows, the user folder, the sprite conversion): the panel redraws when it changes.
 local function signature(): string
 	local ok, files = pcall(tern.fs.list, USER_DIR)
 	return tern.json.encode({
-		tern.kv.get(i18n.KV_KEY),
 		tern.kv.get(registry.KEY_ON),
 		tern.kv.get(registry.KEY_CFG),
 		tern.kv.get(registry.KEY_LOOK),
@@ -126,7 +123,7 @@ tern.block.define("panel", {
 			local now = signature()
 			if now ~= s.last then
 				s.last = now
-				-- Tern'in kendi × düğmesiyle kapanan pane'in kapanış kancası yok: çizim hata verir, zincir biter.
+				-- A pane closed with Tern's own × button has no close hook: rendering fails and the chain ends.
 				if not pcall(cx.render, cx) then
 					return
 				end
@@ -137,7 +134,7 @@ tern.block.define("panel", {
 		return s
 	end,
 	title = function(_s: State): string?
-		return i18n.strings(i18n.current(tern)).title
+		return strings.text.title
 	end,
 	view = function(s: State, _cx: BlockCx): BlockView
 		return { main = ui.col({ ui.node("prefs", panel.props(data(), s.page, s.editing)) }) }
@@ -170,13 +167,13 @@ tern.block.define("panel", {
 				pcall(tern.fs.mkdir, USER_DIR)
 				cx:open(USER_DIR)
 			elseif act == "pick" and type(value) == "string" then
-				-- Yol alanı (cx:prompt) yalnız pencere yarısında var; pencere bu isteği izler.
+				-- The path prompt (cx:prompt) exists only in the window half; the window watches this request.
 				tern.kv.set("pick_req", { id = string.format("%.3f", tern.now()), field = value })
 			end
 			return
 		end
 		if ev.ev == "activate" and type(ev.item) == "string" then
-			-- Menü açıldı: seçili seçenek önizleme olarak tutulur.
+			-- Menu opened: the selected option is kept as a preview.
 			s.editing = { row = ev.item }
 			return
 		end
@@ -202,19 +199,15 @@ tern.block.define("panel", {
 			cx:exit(0)
 			return true
 		end
-		if k.name == "l" and not s.editing then
-			tern.kv.set(i18n.KV_KEY, i18n.other(i18n.current(tern)))
-			return true
-		end
 		return false
 	end,
 })
 
--- Hareketli duvar kağıdı -----------------------------------------------------
+-- Animated wallpaper ---------------------------------------------------------
 --
--- Kayıt `wp_anim`: { src, busy } dönüşüm sürerken, { src, file, cols, rows,
--- frames, fps, ratio } bitince, { src, still = true } tek kareliyse, { src,
--- error } olmazsa. Pencere `src` seçili görselle aynıyken kullanır.
+-- The `wp_anim` record: { src, busy } while converting, { src, file, cols, rows,
+-- frames, fps, ratio } when done, { src, still = true } for a single frame, { src,
+-- error } on failure. The window uses it while `src` matches the selected image.
 
 local converting: string? = nil
 
@@ -297,7 +290,7 @@ local function convert(src: string)
 		end
 	end)
 	if not ok then
-		-- ffmpeg yoksa görsel yine gösterilir, yalnız ilk karesiyle.
+		-- Without ffmpeg the image is still shown, with its first frame only.
 		finish(src, { still = true, error = "ffprobe not found" })
 	end
 end
@@ -319,7 +312,7 @@ local function watch_wallpaper()
 	end
 	tern.timer(POLL_MS, watch_wallpaper)
 end
--- Yeniden yüklemede yarım kalan dönüşüm (`busy`) baştan başlasın.
+-- A conversion left half-done by a reload (`busy`) starts over.
 do
 	local rec = tern.kv.get("wp_anim")
 	if type(rec) == "table" and rec.busy then

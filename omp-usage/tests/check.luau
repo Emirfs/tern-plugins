@@ -1,5 +1,5 @@
 --!strict
--- Küçük doğrulama yardımcıları: ilk başarısız denetim hatayla durur.
+-- Small assertion helpers: the first failed check stops with an error.
 
 local check = { count = 0 }
 
@@ -24,7 +24,7 @@ function check.truthy(v: any, what: string)
 	end
 end
 
--- Derin eşitlik: tabloların anahtarları ve değerleri karşılıklı aynı.
+-- Deep equality: the tables' keys and values match in both directions.
 local function same(a: any, b: any): boolean
 	if type(a) ~= "table" or type(b) ~= "table" then
 		return a == b

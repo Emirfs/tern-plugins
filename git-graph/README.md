@@ -1,70 +1,78 @@
-# Git grafiği
+# Git graph
 
-Bir deponun commit grafiği Tern paneli olarak, Fork düzeninde: solda dallar, uzak dallar ve etiketler; ortada
-renkli şeritli commit listesi; altta seçili commit, değişen dosyaları ve seçili dosyanın diff'i yan yana.
-Fikir [mykeura/git-gui](https://github.com/mykeura/git-gui)'den; `git` PATH'te olmalı.
+A repository's commit graph as a Tern pane, laid out like Fork: branches, remote branches and tags on the left;
+the commit list with colored lanes in the middle; below it the selected commit, its changed files and the
+selected file's diff side by side. The idea comes from [mykeura/git-gui](https://github.com/mykeura/git-gui);
+`git` must be on the PATH.
 
-## Açmak
+![Git graph pane on a sample repository: branches and tags on the left, colored lanes with merges, and the selected commit's details and diff below](docs/screenshot.webp)
 
-| Komut | Ne yapar |
+## Opening it
+
+| Command | What it does |
 |---|---|
-| **Git grafiği: yeni panel** | Odaktaki terminalin (ya da omp/agent panesinin) deposunu izler; odak başka depoya geçince grafik de geçer |
-| **Git grafiği: bu klasörün deposu (sabit)** | Odaktaki terminalin deposunu sabitler |
-| **Git grafiği: depo seç** | `~/GitHub` altındaki bütün depolardan yazarak süzüp seçer |
+| **Git graph: new pane (follows the focused terminal)** | Follows the repo of the focused terminal (or omp/agent pane); when focus moves to another repo, the graph moves with it |
+| **Git graph: this folder's repo (pinned)** | Pins the focused terminal's repo |
+| **Git graph: pick a repo** | Filter-as-you-type picker over every repo under `~/GitHub` |
 
-Her komut yeni bir pane açar: birden çok depo yan yana açılabilir, pane'ler taşınabilir ve park edilebilir.
-Panede **Depolar** (`o`) aynı seçiciyi açar, **Sabitle / Odağı izle** (`p`) izleme ile sabit arasında geçer.
+Each command opens a new pane: several repos can sit side by side, and panes can be moved and parked.
+In the pane, **Repos** (`o`) opens the same picker, and **Pin / Follow focus** (`p`) switches between following and pinned.
 
-## Kullanım
+## Using it
 
-- **Grafik**: her dal kendi renginde kesintisiz bir çizgi; dolu nokta commit, halka birleşme, haleli nokta
-  HEAD. Çizgileri `style.css` çizer; stil yüklenmezse aynı grafik kutu karakterleriyle (`│ ● ╮ ╯`) görünür.
-  Dal etiketleri mesajın önünde, commit'in şerit renginde (Fork gibi): geçerli dal kalın, `☁` uzak dal, `⌂`
-  etiket. **Uzak dallar** (`u`) uzak dalları da çizer. İlk 400 commit okunur, tablonun sonundaki düğme
-  sonrakileri yükler.
-- **Dallar**: yerel dallar (geçerli dal `●`), her uzak depo ayrı başlık altında, etiketler; tıklayınca o
-  dalın commit'i seçilir. Geniş panede solda sütun, dar panede listenin üstünde bir şerit.
-- **Alt bölüm**: commit seçince mesajın gövdesi, yazar, tarih, SHA, ebeveynler (tıklayınca o commit'e gider),
-  mesajdaki Jira anahtarları ve değişen dosyalar; ilk dosyanın diff'i hemen sağda açılır. Başka dosyaya
-  tıklamak ya da `[` `]` diff'i değiştirir. Birleşmelerde dosyalar ilk ebeveyne göredir (PR'ın getirdikleri).
-- **Sağ tık** bir commit'te: hash'i kopyala, web'de aç (GitHub/GitLab), buradan dal aç, AI'a açıklat, o
-  commit'teki dallara geç, Jira kartını ve kasadaki kart notunu aç.
-- **Tuşlar**: `↑` `↓` / `j` `k` commit, `r` yenile, `f` fetch, `c` hash kopyala, `w` web, `b` dal aç, `a` AI,
-  `v` Görünüm.
-- Pane 15 saniyede bir dalların ve HEAD'in yerine bakar; geçmişi yalnız bir şey kıpırdadıysa yeniden okur.
+- **Graph**: every branch is an unbroken line in its own color; a filled dot is a commit, a ring is a merge, a
+  dot with a halo is HEAD. `style.css` draws the lines; if the style does not load, the same graph shows in
+  box-drawing characters (`│ ● ╮ ╯`). Branch labels sit before the message in the commit's lane color (as in
+  Fork): the current branch is bold, `☁` marks a remote branch, `⌂` a tag. **Remote branches** (`u`) draws
+  remote branches too. The first 400 commits are read; the button at the end of the table loads the next page.
+- **Branches**: local branches (the current one marked `●`), each remote under its own heading, and tags;
+  clicking one selects that ref's commit. A column on the left in a wide pane, a strip above the list in a
+  narrow one.
+- **Lower section**: selecting a commit shows its message body, author, date, SHA, parents (click one to jump
+  to it), the Jira keys in the message and the changed files; the first file's diff opens right beside them.
+  Click another file or press `[` `]` to change the diff. For merges, files are relative to the first parent
+  (what the PR brought in).
+- **Right-click** a commit: copy the hash, open on the web (GitHub/GitLab), create a branch here, explain with
+  AI, switch to the branches on that commit, open the Jira card and the card's note in the vault.
+- **Keys**: `↑` `↓` / `j` `k` commit, `r` refresh, `f` fetch, `c` copy hash, `w` web, `b` create branch, `a` AI,
+  `v` View.
+- Every 15 seconds the pane checks where the branches and HEAD are; it re-reads history only if something moved.
 
-## Görünüm: dar ve geniş pane
+## View: narrow and wide panes
 
-Başlıktaki ayar düğmesi (`v`) **Görünüm** panelini alt bölümde açar. Pane belli bir genişliğin (sütun) altında
-**dar**, üstünde **geniş** sayılır; araç çubuğu, sol sütun, grafik, dal adları, yazar, zaman, hash ve alt bölüm
-her biri dar ve geniş için ayrı ayrı açılıp kapanır. Pane büyüyüp küçüldükçe görünüm kendiliğinden değişir.
+The settings button in the header (`v`) opens the **View** panel in the lower section. A pane below a certain
+width (in columns) counts as **narrow**, above it as **wide**; the toolbar, left column, graph, branch names,
+author, age, hash and lower section can each be turned on or off separately for narrow and wide. The view
+changes by itself as the pane grows and shrinks.
 
-- Eşik `Eşik −10` / `Eşik +10` ile ya da **Eşik = şu anki genişlik** ile ayarlanır (varsayılan 110 sütun).
-- Varsayılan: dar panede araç çubuğu, yazar ve hash kapalı (dallar üstte şerit); geniş panede hepsi açık. Araç
-  çubuğu kapalıyken tuşlar çalışmaya devam eder.
-- Ayar o pane'de saklanır; **Yeni paneller de böyle açılsın** onu yeni açılan panellerin varsayılanı yapar.
+- The threshold is set with `Threshold −10` / `Threshold +10` or **Threshold = current width** (default 110 columns).
+- Defaults: in a narrow pane the toolbar, author and hash are off (branches show as a strip on top); in a wide
+  pane everything is on. With the toolbar off, the keys keep working.
+- The setting is stored per pane; **Open new panes like this too** makes it the default for newly opened panes.
 
-## Ne yazar
+## What it writes
 
-Yalnız senin başlattığın güvenli işler:
+Only safe actions that you start:
 
-- **Dala geç**: çalışma ağacında kaydedilmemiş değişiklik varsa reddeder; yoksa onay sorar, sonra
-  `git switch` (uzak dal için `git switch --track`).
-- **Dal aç**: adı sorar, `git check-ref-format` ile doğrular, `git branch <ad> <commit>` (dala geçmez).
-- **Fetch**: `git fetch --all`; parola sorulmaz (`GIT_TERMINAL_PROMPT=0`).
+- **Switch to branch**: refuses if the working tree has uncommitted changes; otherwise asks for confirmation,
+  then runs `git switch` (`git switch --track` for a remote branch).
+- **Create branch**: asks for a name, validates it with `git check-ref-format`, runs `git branch <name> <commit>`
+  (does not switch to it).
+- **Fetch**: `git fetch --all`; never prompts for a password (`GIT_TERMINAL_PROMPT=0`).
 
-Commit, push, reset, merge ya da silme yapmaz.
+It never commits, pushes, resets, merges or deletes.
 
-## AI açıklaması
+## AI explanation
 
-**AI'a açıklat** commit'in mesajını, istatistiğini ve diff'ini (en çok 12 000 karakter) ucuz modele verir ve
-en çok 5 maddelik Türkçe özeti ayrıntıda gösterir. Varsayılan: `omp -p --no-tools … --model haiku`; araç,
-oturum, kural ve bağlam dosyası yüklenmez. Sonuç commit başına saklanır, aynı commit için tekrar harcamaz.
+**Explain with AI** gives the commit's message, stats and diff (at most 12,000 characters) to a cheap model and
+shows an English summary of at most 5 bullets in the lower section. Default: `omp -p --no-tools … --model haiku`;
+no tools, session, rules or context files are loaded. The result is stored per commit, so the same commit is
+never paid for twice.
 
-## Ayarlar
+## Settings
 
-Eklentinin veri klasöründeki `config.json` (Windows'ta `%LOCALAPPDATA%\Tern\plugin-data\git-graph\`), hepsi
-isteğe bağlı:
+`config.json` in the plugin's data folder (on Windows `%LOCALAPPDATA%\Tern\plugin-data\git-graph\`); every key
+is optional:
 
 ```json
 {
@@ -77,16 +85,16 @@ isteğe bağlı:
 }
 ```
 
-- `roots`, `depth`: **Depolar** seçicisinin taradığı klasörler ve derinlik (`node_modules`, `.venv`, gizli
-  klasörler atlanır; bir deponun içine inilmez).
-- `jira_projects`: yalnız bu projelerin anahtarları kart sayılır (`UTF-8`, `SHA-256` sayılmaz).
-- `vault`: kart notu `jira/<KEY>.md` ve proje notu `projects/<depo>.md` buradan açılır.
+- `roots`, `depth`: the folders the **Repos** picker scans, and how deep (`node_modules`, `.venv` and hidden
+  folders are skipped; it does not descend into a repo).
+- `jira_projects`: only keys of these projects count as cards (`UTF-8` and `SHA-256` do not).
+- `vault`: the card note `jira/<KEY>.md` and the project note `projects/<repo>.md` are opened from here.
 
-## Test
+## Tests
 
 ```sh
 lune run git-graph/tests/run.luau
 ```
 
-Şerit yerleşimi, ayrıştırıcılar, geçici bir depoda gerçek git ile komutlar ve paneli taklit çalışma
-zamanında uçtan uca (dala geçme onayı, kirli ağaçta ret, odak izleme, AI önbelleği) dener.
+Covers lane layout, the parsers, commands against real git in a temporary repo, and the pane end to end in a
+fake runtime (switch confirmation, refusal on a dirty tree, focus following, the AI cache).

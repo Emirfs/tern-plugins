@@ -1,7 +1,7 @@
 --!strict
 local check = require("./check")
 local fixture = require("./fixture")
-local i18n = require("../lib/i18n")
+local L = require("../lib/text")
 local usage = require("../lib/usage")
 
 local H5 = 5 * 3600 * 1000
@@ -20,7 +20,7 @@ local function find(providers: { usage.Provider }, id: string): usage.Provider?
 	return nil
 end
 
--- Toplama: aynı hesap iki profilde bir kez, en taze raporla
+-- Aggregation: the same account in two profiles once, with the freshest report
 do
 	local providers, issues = usage.aggregate({ "default", "work" }, runs(fixture.default(), fixture.work()))
 	local ids = {}
@@ -55,15 +55,15 @@ do
 	check.eq(issues[2].kind, "disabled", "disabled issue")
 	check.eq(issues[2].detail, "token expired", "disabled cause keeps its first line")
 
-	local cols = usage.columns_of(providers, i18n.strings("tr"))
+	local cols = usage.columns_of(providers, L)
 	local labels = {}
 	for _, c in cols do
 		table.insert(labels, c.label)
 	end
-	check.same(labels, { "5 saat", "5 saat spark", "7 gün", "7 gün opus" }, "columns short to long, pools after the main one")
+	check.same(labels, { "5 hours", "5 hours spark", "7 days", "7 days opus" }, "columns short to long, pools after the main one")
 end
 
--- Farklı org aynı e-postayla ayrı hesaptır
+-- A different org with the same e-mail is a separate account
 do
 	local other = fixture.work()
 	other.reports[1].metadata.orgId = "org-2"
@@ -71,7 +71,7 @@ do
 	check.eq(#(find(providers, "anthropic") :: usage.Provider).accounts, 2, "different org is a different account")
 end
 
--- Profil verisi yoksa (hata) toplama onu atlar
+-- Without profile data (an error) aggregation skips it
 do
 	local providers = usage.aggregate({ "default", "work" }, { default = { data = nil }, work = { data = fixture.work() } })
 	check.eq(#providers, 1, "profile without data is skipped")
@@ -87,7 +87,7 @@ do
 	check.eq(usage.used_fraction({ usedFraction = 0 / 0 }), nil, "NaN is unknown")
 end
 
--- trim: önbelleğe giden kopya toplamayı değiştirmez, fazlasını taşımaz
+-- trim: the copy sent to the cache does not change the aggregate and carries nothing extra
 do
 	local raw_d, raw_w = fixture.default(), fixture.work()
 	local a = usage.aggregate({ "default", "work" }, runs(raw_d, raw_w))

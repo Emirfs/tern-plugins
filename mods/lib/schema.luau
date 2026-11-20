@@ -1,16 +1,17 @@
 --!strict
--- Mod ayarlarının şeması ve doğrulaması. kv'den gelen her değer CSS'e girmeden
--- önce buradan geçer: seçenek dışı seçim, aralık dışı sayı, renk olmayan metin
--- varsayılana döner. CSS'e kullanıcı metni ancak buradaki denetimlerle girer.
+-- Schema and validation for mod settings. Every value coming from kv passes
+-- through here before it reaches CSS: an out-of-options choice, an out-of-range
+-- number or a non-color string falls back to the default. User text enters CSS
+-- only through the checks in this file.
 
 export type Kind = "choice" | "number" | "bool" | "color" | "colors" | "path"
 
 export type Field = {
 	key: string,
 	kind: Kind,
-	-- choice: geçerli değerler, sırasıyla.
+	-- choice: the valid values, in order.
 	options: { string }?,
-	-- choice: "segmented" kısa seçenekler, "menu" uzun liste (varsayılan Tern seçer).
+	-- choice: "segmented" for short options, "menu" for a long list (default: Tern picks).
 	style: ("segmented" | "menu")?,
 	-- number
 	min: number?,
@@ -21,7 +22,7 @@ export type Field = {
 
 export type Settings = { [string]: any }
 
--- profile-accent: omp profili çalışan bir pane.
+-- profile-accent: a pane running an omp profile.
 export type PaneEnv = {
 	pane: number,
 	title: string,
@@ -29,18 +30,18 @@ export type PaneEnv = {
 	focused: boolean,
 }
 
--- Hareketli duvar kağıdı: ffmpeg'in tek bir sprite sheet'e dizdiği kareler.
+-- Animated wallpaper: the frames ffmpeg lays out into a single sprite sheet.
 export type Anim = {
 	url: string,
 	cols: number,
 	rows: number,
 	frames: number,
 	fps: number,
-	-- Bir karenin en/boy oranı (genişlik / yükseklik).
+	-- A frame's aspect ratio (width / height).
 	ratio: number,
 }
 
--- Mod CSS'inin pencereden aldığı, ayar dışı bilgiler.
+-- Non-setting information the mod CSS gets from the window.
 export type Env = {
 	panes: { PaneEnv },
 	wallpaper_url: string?,
@@ -56,7 +57,7 @@ export type Mod = {
 
 local schema = {}
 
--- Renk alanlarının adlı seçenekleri; Tern'in tema değişkenleri ya da sabit tonlar.
+-- The named options of color fields; Tern's theme variables or fixed tones.
 schema.PALETTE = {
 	accent = "var(--accent)",
 	live = "var(--live)",
@@ -81,7 +82,7 @@ function schema.is_hex(v: any): boolean
 	return hex ~= nil and (#hex == 3 or #hex == 4 or #hex == 6 or #hex == 8)
 end
 
---- Renk değerinin CSS karşılığı: palet adı ya da onaltılık renk; başka her şey nil.
+--- A color value's CSS form: a palette name or a hex color; anything else is nil.
 function schema.color(v: any): string?
 	if type(v) ~= "string" then
 		return nil
@@ -96,7 +97,7 @@ function schema.color(v: any): string?
 	return nil
 end
 
--- Profil adı: omp'nin `~/.omp/profiles/<ad>` klasör adı gibi, CSS'e girmez ama sınırlı tutulur.
+-- Profile name: like omp's `~/.omp/profiles/<name>` folder name; it doesn't enter CSS but is kept bounded.
 function schema.is_profile_name(v: any): boolean
 	return type(v) == "string" and #v > 0 and #v <= 64 and string.match(v, "^[%w%._%-]+$") ~= nil
 end
@@ -122,14 +123,14 @@ local function clean_number(field: Field, v: any): number?
 		local base = if field.min then field.min else 0
 		n = base + math.floor((n - base) / step + 0.5) * step
 		n = math.clamp(n, lo, hi)
-		-- Kayan nokta artığı (0.30000000000000004) CSS'e çıkmasın.
+		-- Keep floating-point residue (0.30000000000000004) out of the CSS.
 		n = math.floor(n * 1000 + 0.5) / 1000
 	end
 	return n
 end
 
--- Dosya yolu: kontrol karakteri yok, makul uzunluk. CSS'e yol değil, okunan dosyanın
--- base64'ü girer; yol yalnız okunur.
+-- File path: no control characters, a sensible length. What enters CSS is the base64
+-- of the file that was read, not the path; the path is only read.
 local function clean_path(v: any): string?
 	if type(v) ~= "string" or #v > 1024 or string.find(v, "%c") then
 		return nil
@@ -166,8 +167,8 @@ local function clean_one(field: Field, v: any): (boolean, any)
 	return false, nil
 end
 
---- Bir modun kayıtlı ayarları (`raw`, kv'den, her şey olabilir) doğrulanmış haliyle:
---- eksik ya da geçersiz her alan varsayılanını alır, bilinmeyen anahtarlar düşer.
+--- A mod's saved settings (`raw`, from kv, can be anything) in validated form:
+--- every missing or invalid field gets its default, unknown keys are dropped.
 function schema.normalize(fields: { Field }, defaults: Settings, raw: any): Settings
 	local out: Settings = {}
 	local src = if type(raw) == "table" then raw else {}
@@ -182,7 +183,7 @@ function schema.normalize(fields: { Field }, defaults: Settings, raw: any): Sett
 	return out
 end
 
---- Tek bir alana gelen yeni değer geçerliyse temizlenmiş hali, değilse nil.
+--- The cleaned value if the new value for one field is valid, otherwise nil.
 function schema.accept(field: Field, v: any): any
 	local ok, clean = clean_one(field, v)
 	if ok then
@@ -200,7 +201,7 @@ function schema.field(fields: { Field }, key: string): Field?
 	return nil
 end
 
---- CSS çift tırnaklı dizgesi: ters bölü, tırnak ve satır sonları kaçırılır.
+--- A double-quoted CSS string: backslash, quote and line breaks are escaped.
 function schema.css_string(s: string): string
 	local out = string.gsub(s, "[\\\"\n\r\f]", function(c: string): string
 		if c == "\\" then
@@ -213,7 +214,7 @@ function schema.css_string(s: string): string
 	return '"' .. out .. '"'
 end
 
---- Sayının CSS'e kısa yazımı (12, 12.5).
+--- A number written compactly for CSS (12, 12.5).
 function schema.num(n: number): string
 	if n == math.floor(n) then
 		return string.format("%d", n)

@@ -1,8 +1,10 @@
 # mods
 
 Small switchable tweaks that restyle Tern, the way Claude Code mods personalize Claude Code: a settings
-panel with an **Appearance** page and a **Mods** page, eleven built-in mods and a folder for your own CSS.
+panel with an **Appearance** page and a **Mods** page, ten built-in mods and a folder for your own CSS.
 Every mod starts off; turn on what you like.
+
+![The Mods panel's Mods page: each built-in mod with its switch and settings](docs/screenshot.webp)
 
 ## Install
 
@@ -14,19 +16,17 @@ Tested on Tern 0.9.26 (Windows 11). The animated-image wallpaper needs `ffmpeg` 
 
 ## Usage
 
-- Command palette: **Mods** (Turkish: **Modlar**) opens the panel beside the focused pane, or focuses it.
+- Command palette: **Mods** opens the panel beside the focused pane, or focuses it.
   Changes apply at once in every window.
 - **Mods: toggle focus mode** (`Ctrl+Alt+Z`), **Mods: toggle privacy blur**, **Mods: turn every mod off**,
-  **Mods: open the user mods folder**, **Mods: switch language (TR/EN)**.
-- In the panel, `Esc` closes it and `l` switches the language.
+  **Mods: open the user mods folder**.
+- In the panel, `Esc` closes it.
 
 ## Appearance page
 
 Only what Tern's own Settings don't have (font, size, theme, opacity, material, density and layout are
 Tern's):
 
-- **Language**: Turkish or English (saved as `lang`; until chosen, a `tr*` locale gives Turkish, anything
-  else English; Windows sets none, so English).
 - **Accent color**: replaces the theme's accent (selected tab, buttons, focus ring).
 - **Corners**: sharp, soft or round corners for buttons, cards, menus and tabs.
 - **Presets**: *Minimal* (compact tabs, tab style, pane shape), *Cozy* (tab style, pane shape, composer, busy
@@ -47,7 +47,6 @@ Tern's):
 | Composer | The bottom line of agent chats: input box, model/account row, status row above it. | density, corners, border, background, text size, status row show / dim / hide |
 | Ask prompts | The agent's questions and approval requests: question box, permission dialog, waiting card. | border color, density, glow |
 | Busy animation | Panes and tabs whose agent works: edge shimmer, tab pulse, both, or none (Tern's own animations go quiet too). | style, color, loop length |
-| Parked chats | The pile of panes parked out of tabs. Its place and size stay Tern's (`park_pile`, drag a card). | cards Tern / compact / large preview, idle opacity, accent stripe |
 
 Limits, stated honestly:
 
@@ -83,7 +82,7 @@ The [example gallery](../examples) has three ready-to-copy CSS files with screen
 
 ## How it works
 
-Settings live in the plugin's `tern.kv` (`on`, `cfg`, `look`, `lang`), shared by both halves and every
+Settings live in the plugin's `tern.kv` (`on`, `cfg`, `look`), shared by both halves and every
 window. The host half (`host.luau`) draws the panel with Tern's native settings page (`prefs` node) and
 converts animated wallpapers. The window half (`window.luau`) reads kv every 500 ms (a cheap read; Tern
 reloads the file only when it changed) and installs each mod as its own sheet with `tern.css("mod-<id>", …)`
@@ -94,12 +93,12 @@ to the default.
 
 Layout: `lib/mods/*.luau` (one module per mod: defaults, fields, `css(settings, env)`), `lib/registry.luau`
 (the list, kv keys, user mods), `lib/panel.luau` (panel rows and how a change becomes kv writes),
-`lib/appearance.luau`, `lib/schema.luau`, `lib/sprite.luau`, `lib/i18n.luau`.
+`lib/appearance.luau`, `lib/schema.luau`, `lib/sprite.luau`, `lib/strings.luau`.
 
 ## Fragility
 
 The mods target Tern's internal classes and omp's surface roles (`#tabbar`, `.tt`, `.tn-pane`, `.tn-head`,
-`--tn-bar`, `--tn-tile-gap`, `.pk-pile`, `[data-role='omp.editor']`, …). They were checked against
+`--tn-bar`, `--tn-tile-gap`, `.pk-card`, `[data-role='omp.editor']`, …). They were checked against
 Tern 0.9.26; a Tern update that renames them breaks the mod that uses them until it is updated.
 
 ## Tests

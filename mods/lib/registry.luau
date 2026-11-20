@@ -1,9 +1,9 @@
 --!strict
--- Modların listesi ve kv'deki durumları. İki yarı da aynı anahtarları okur:
---   on   = { [mod id] = true }      açık modlar (yerleşik ve kullanıcı)
---   cfg  = { [mod id] = ayarlar }   yerleşik modların ayarları
---   look = Görünüm sekmesinin ayarları
--- Kullanıcı modları: veri klasöründeki `user-mods/*.css`, kimlikleri `user-<ad>`.
+-- The list of mods and their state in kv. Both halves read the same keys:
+--   on   = { [mod id] = true }      enabled mods (built-in and user)
+--   cfg  = { [mod id] = settings }  settings of the built-in mods
+--   look = the Appearance tab's settings
+-- User mods: `user-mods/*.css` in the data folder, ids `user-<name>`.
 
 local schema = require("./schema")
 
@@ -20,14 +20,13 @@ registry.BUILTIN = {
 	require("./mods/composer"),
 	require("./mods/ask_style"),
 	require("./mods/busy_animation"),
-	require("./mods/parked"),
 } :: { schema.Mod }
 
 registry.KEY_ON = "on"
 registry.KEY_CFG = "cfg"
 registry.KEY_LOOK = "look"
 registry.USER_DIR = "user-mods"
--- Bir kullanıcı CSS dosyasının okunacak en büyük boyu.
+-- The largest size read from a user CSS file.
 registry.USER_MAX_BYTES = 256 * 1024
 
 function registry.builtin(id: string): schema.Mod?
@@ -39,7 +38,7 @@ function registry.builtin(id: string): schema.Mod?
 	return nil
 end
 
---- kv'deki `on` tablosundan açık modlar; tanınmayan değerler düşer.
+--- The enabled mods from kv's `on` table; unrecognized values are dropped.
 function registry.enabled(raw: any): { [string]: boolean }
 	local out: { [string]: boolean } = {}
 	if type(raw) ~= "table" then
@@ -53,7 +52,7 @@ function registry.enabled(raw: any): { [string]: boolean }
 	return out
 end
 
---- Yerleşik modun kv'den (`cfg[id]`) doğrulanmış ayarları.
+--- A built-in mod's validated settings from kv (`cfg[id]`).
 function registry.settings(m: schema.Mod, cfg: any): schema.Settings
 	local raw = if type(cfg) == "table" then cfg[m.id] else nil
 	return schema.normalize(m.fields, m.defaults, raw)
@@ -65,7 +64,7 @@ export type UserMod = {
 	title: string,
 }
 
---- Dosya adından mod kimliği: `My Theme.css` → `user-my-theme`; CSS değilse nil.
+--- A mod id from a file name: `My Theme.css` → `user-my-theme`; nil if it isn't CSS.
 function registry.user_id(file: string): string?
 	local stem = string.match(file, "^(.+)%.[cC][sS][sS]$")
 	if stem == nil then
@@ -81,7 +80,7 @@ function registry.user_id(file: string): string?
 	return "user-" .. string.sub(slug, 1, 40)
 end
 
---- Dosyanın başındaki `/* title: … */` yorumundan başlık, yoksa uzantısız dosya adı.
+--- A title from the leading `/* title: … */` comment of the file, else the file name without extension.
 function registry.user_title(text: string?, file: string): string
 	if text then
 		local head = string.match(text, "^%s*/%*(.-)%*/")
@@ -96,12 +95,12 @@ function registry.user_title(text: string?, file: string): string
 	return (string.gsub(file, "%.[cC][sS][sS]$", ""))
 end
 
---- Klasör listesinden kullanıcı modları, ad sırasıyla; aynı kimliğe düşen
---- ikinci dosya `-2` alır. `read(file)` dosyanın başını (başlık için) verir.
+--- User mods from a folder listing, sorted by name; a second file that lands on
+--- the same id gets `-2`. `read(file)` gives the file's head (for the title).
 function registry.user_mods(files: { string }, read: (file: string) -> string?): { UserMod }
 	local out: { UserMod } = {}
 	local seen: { [string]: boolean } = {}
-	-- Tern'in verdiği tablolar korumalı (table.clone olmaz): elle kopyala.
+	-- The tables Tern gives are protected (no table.clone): copy by hand.
 	local sorted: { string } = {}
 	for _, f in files do
 		table.insert(sorted, f)

@@ -1,10 +1,10 @@
 --!strict
--- Pencere yarısı: Hafıza panelini açan (açıksa odaklayan) palet komutu.
+-- Window half: the palette command that opens the Memory panel (or focuses it if already open).
 local KIND = "hafiza.panel"
 
 tern.command({
 	id = "open",
-	title = "Hafıza: öneriler ve bugün",
+	title = "Memory: suggestions and today",
 	run = function(cx: WindowCx)
 		for _, pane in cx.session:panes() do
 			if pane.block == KIND and not pane.parked then
@@ -13,7 +13,7 @@ tern.command({
 			end
 		end
 		if cx:new_block(KIND, nil, "beside") == nil then
-			cx:toast("error", "Hafıza paneli açılamadı", "Eklentinin host yarısı yüklenmemiş; `tern plugin list` ile bakın.")
+			cx:toast("error", "Could not open the Memory panel", "The plugin's host half is not loaded; check `tern plugin list`.")
 		end
 	end,
 })

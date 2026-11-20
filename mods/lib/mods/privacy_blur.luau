@@ -1,12 +1,12 @@
 --!strict
--- Ekran kaydı modu: e-posta, hesap adı, yol ve başlıkların bilinen yerlerini
--- bulanıklaştırır, imleç üzerine gelince açar. CSS bir metnin içinde sır
--- aramaz: yalnız aşağıdaki yerleri bütünüyle örter; bir terminalin ya da
--- sohbetin gövdesine yazılan e-posta ya da token açık kalır.
+-- Screen-recording mode: blurs the known places of e-mails, account names, paths and
+-- titles, and unblurs them under the pointer. CSS can't look for a secret inside
+-- text: it only covers the places below entirely; an e-mail or token written in the
+-- body of a terminal or a chat stays readable.
 
 local schema = require("../schema")
 
--- Hedef grubu → seçiciler. Tern'in iç sınıfları ve omp yüzeylerinin data-role'leri.
+-- Target group → selectors. Tern's internal classes and the data-roles of omp surfaces.
 local TARGETS: { [string]: { string } } = {
 	tabs = {
 		"#tabbar .tt .tx",

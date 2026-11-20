@@ -1,8 +1,8 @@
 --!strict
--- Ajanın soru/onay arayüzü, Tern'in çizdiği yerlerde: omp `ask` aracının yazma
--- kutusunun yerine geçen soru kutusu (`omp.editor.ask`), soru ve izin pencereleri
--- (`omp.overlay.ask`, `omp.overlay.permission`) ve sohbette kullanıcıyı bekleyen
--- araç kartı (`.sf-tool.st-ask`).
+-- The agent's question/approval UI, where Tern draws it: the question box that
+-- replaces the input box of omp's `ask` tool (`omp.editor.ask`), the question and
+-- permission dialogs (`omp.overlay.ask`, `omp.overlay.permission`) and the tool
+-- card that waits for the user in the chat (`.sf-tool.st-ask`).
 
 local schema = require("../schema")
 

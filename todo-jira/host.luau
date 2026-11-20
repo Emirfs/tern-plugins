@@ -1,8 +1,8 @@
 --!strict
--- `board` bloğu: bu hesaba atanmış Jira kartları ve her kartın bütün yorumları (yazar, tarih, metin).
--- Salt okunur: Jira'ya yazmaz. Sağ tık "AI’a ver" isteği kv üzerinden pencere yarısına gider
--- (seçici ve onay yalnız orada var); "Jira’da aç" kartı tarayıcıda açar.
--- Tuşlar: r yenile, d bitenleri göster/gizle, enter seçili kartı Jira'da aç.
+-- `board` block: the Jira cards assigned to this account and every comment on each (author, date, text).
+-- Read-only: it never writes to Jira. The right-click "Hand to AI" request reaches the window half through kv
+-- (the picker and the approval exist only there); "Open in Jira" opens the card in the browser.
+-- Keys: r refresh, d show/hide finished cards, enter open the selected card in Jira.
 
 local runner = require("./lib/runner")
 
@@ -11,16 +11,16 @@ local ui = tern.ui
 local REFRESH_MS = 5 * 60 * 1000
 local LANE_ORDER: { [string]: number } = { Doing = 1, Todo = 2, Done = 3 }
 local LANE_TONE: { [string]: string } = { Doing = "accent", Todo = "muted", Done = "success" }
-local ACT_AI = "AI’a ver"
-local ACT_OPEN = "Jira’da aç"
-local ACT_COPY = "Bağlantıyı kopyala"
-local ACT_NOTE = "Hafıza notunu aç"
+local ACT_AI = "Hand to AI"
+local ACT_OPEN = "Open in Jira"
+local ACT_COPY = "Copy link"
+local ACT_NOTE = "Open memory note"
 
 type Comment = { id: string, author: string, mine: boolean, created: string, edited: boolean, text: string, url: string }
 type Issue = {
 	key: string, title: string, lane: string, status_name: string, updated: string,
 	url: string, description: string, comments: { Comment },
-	-- Kasadaki kart notu (`jira/<KEY>.md`): gövdesi ve yolu.
+	-- The card note in the vault (`jira/<KEY>.md`): its body and its path.
 	memory: string?, note: string?,
 }
 type State = {
@@ -44,7 +44,7 @@ local function with(node: Node, props: { [string]: any }): Node
 end
 
 local function render(state: State)
-	-- Tern'in × düğmesiyle kapanan pane'in kancası yok: çizim hata verirse zinciri bitir.
+	-- A pane closed with Tern's × button has no hook: if drawing fails, end the chain.
 	if not state.closed and not pcall(state.cx.render, state.cx) then
 		state.closed = true
 	end
@@ -80,7 +80,7 @@ local function refresh(state: State)
 	if state.loading or state.closed then
 		return
 	end
-	-- İlk çağrı `init` içinde: burada çizilmez, görünüm `loading`i zaten gösterir.
+	-- The first call happens in `init`: nothing is drawn here, the view already shows `loading`.
 	state.loading = true
 	local ok, err = pcall(function()
 		tern.process.run(runner.argv(), {
@@ -89,7 +89,7 @@ local function refresh(state: State)
 			state.loading = false
 			local data, why = runner.decode(result)
 			if why or type(data) ~= "table" then
-				state.err = why or "Jira yanıtı okunamadı."
+				state.err = why or "Could not read the Jira reply."
 			else
 				state.issues = data
 				state.err = nil
@@ -105,7 +105,7 @@ local function refresh(state: State)
 	end)
 	if not ok then
 		state.loading = false
-		state.err = `Python başlatılamadı: {err}`
+		state.err = `Could not start Python: {err}`
 	end
 end
 
@@ -140,48 +140,48 @@ local function issue_table(state: State, issues: { Issue }): Node
 				ui.span(issue.key, "mono"),
 				issue.title,
 				{ text = issue.status_name, dot = LANE_TONE[issue.lane] or "muted" },
-				if #issue.comments == 0 then ui.span("0", "muted") else `{#issue.comments}` .. (if mine > 0 and mine < #issue.comments then ` ({mine} sen)` else ""),
+				if #issue.comments == 0 then ui.span("0", "muted") else `{#issue.comments}` .. (if mine > 0 and mine < #issue.comments then ` ({mine} yours)` else ""),
 				ui.span(last_comment(issue), "muted"),
 			},
 		})
 	end
 	return with(ui.table({
-		{ id = "key", head = "Kart", mono = true },
-		{ id = "title", head = "Başlık", grow = 1 },
-		{ id = "status", head = "Durum", priority = -1 },
-		{ id = "comments", head = "Yorum", align = "end" },
-		{ id = "last", head = "Son yorum", priority = -2 },
+		{ id = "key", head = "Card", mono = true },
+		{ id = "title", head = "Title", grow = 1 },
+		{ id = "status", head = "Status", priority = -1 },
+		{ id = "comments", head = "Comments", align = "end" },
+		{ id = "last", head = "Last comment", priority = -2 },
 	}, rows, {
 		selectable = true,
 		selected = state.selected,
-		empty = if state.loading then "Jira okunuyor…" else "Bu hesaba atanmış açık kart yok.",
+		empty = if state.loading then "Reading Jira…" else "No open cards assigned to this account.",
 	}), { key = "issues" })
 end
 
 local function detail(issue: Issue): Node
 	local children: { Node } = {}
 	if issue.memory and issue.memory ~= "" then
-		table.insert(children, with(ui.section("Hafıza · jira/" .. issue.key .. ".md", { ui.md(issue.memory) }), { key = "memory" }))
+		table.insert(children, with(ui.section("Memory · jira/" .. issue.key .. ".md", { ui.md(issue.memory) }), { key = "memory" }))
 	end
 	if issue.description ~= "" then
-		table.insert(children, with(ui.section("Açıklama", { ui.md(issue.description) }), { key = "desc", collapsed = true }))
+		table.insert(children, with(ui.section("Description", { ui.md(issue.description) }), { key = "desc", collapsed = true }))
 	end
 	if #issue.comments == 0 then
-		table.insert(children, ui.text({ ui.span("Bu kartta yorum yok.", "muted") }))
+		table.insert(children, ui.text({ ui.span("This card has no comments.", "muted") }))
 	end
-	-- En yeni yorum üstte: bir kartın son durumu ilk bakışta görünsün.
+	-- Newest comment on top: a card's latest state is visible at a glance.
 	for i = #issue.comments, 1, -1 do
 		local c = issue.comments[i]
 		local head: { Span | string } = { ui.span(c.author, "strong") }
 		if c.mine then
-			table.insert(head, ui.span(" · sen", "accent"))
+			table.insert(head, ui.span(" · you", "accent"))
 		end
-		local meta = c.created .. (if c.edited then " · düzenlendi" else "")
+		local meta = c.created .. (if c.edited then " · edited" else "")
 		table.insert(children, with(ui.card(head, { ui.md(c.text) }, { meta = meta }), { key = "c" .. c.id }))
 	end
 	local title: { Span | string } = { ui.span(issue.key, "mono"), " " .. issue.title }
 	return with(ui.card(title, children, {
-		meta = `{issue.status_name} · {#issue.comments} yorum`,
+		meta = `{issue.status_name} · {#issue.comments} comments`,
 	}), { key = "detail:" .. issue.key })
 end
 
@@ -192,23 +192,23 @@ local function status_line(state: State, issues: { Issue }): Node
 			done += 1
 		end
 	end
-	local spans: { Span | string } = { ui.span(`{#issues} kart`, "muted") }
+	local spans: { Span | string } = { ui.span(`{#issues} cards`, "muted") }
 	if not state.showDone and done > 0 then
-		table.insert(spans, ui.span(` · {done} biten gizli`, "muted"))
+		table.insert(spans, ui.span(` · {done} finished hidden`, "muted"))
 	end
 	if state.loading then
-		table.insert(spans, ui.span(" · yenileniyor", "muted"))
+		table.insert(spans, ui.span(" · refreshing", "muted"))
 	elseif state.fetched then
 		table.insert(spans, ui.span(" · " .. os.date("%H:%M", state.fetched), "muted"))
 	end
-	table.insert(spans, ui.span("   r yenile · d bitenler · sağ tık: AI’a ver", "dim"))
+	table.insert(spans, ui.span("   r refresh · d finished · right-click: Hand to AI", "dim"))
 	return with(ui.text(spans), { key = "status" })
 end
 
 local function request_ai(state: State, key: string, window: string?)
-	-- Seçici ve onay yalnız pencere yarısında; istek kv ile gider, pencere `id` değişince bir kez işler.
+	-- The picker and the approval exist only in the window half; the request goes through kv and the window handles each `id` once.
 	tern.kv.set("ai-request", { id = string.format("%.3f", tern.now()), key = key, window = window })
-	state.cx:toast("info", key .. " · AI’a ver", "Pencerede pano ve profil seçimi açılıyor.")
+	state.cx:toast("info", key .. " · Hand to AI", "Opening the board and profile picker in the window.")
 end
 
 local function act(state: State, name: string, key: string?, window: string?)
@@ -261,7 +261,7 @@ tern.block.define("board", {
 			table.insert(children, with(ui.text({ ui.span("⚠ " .. state.err, "warning") }), { key = "err" }))
 		end
 		if state.loading and #state.issues == 0 then
-			table.insert(children, ui.progress(nil, "Jira kartları ve yorumlar okunuyor"))
+			table.insert(children, ui.progress(nil, "Reading Jira cards and comments"))
 		else
 			table.insert(children, issue_table(state, issues))
 			local selected = find(state, state.selected)

@@ -1,5 +1,5 @@
 --!strict
--- Depo kökünden: `lune run omp-usage/tests/run.luau` (lib/ modülleri ve blok uçtan uca).
+-- From the repository root: `lune run omp-usage/tests/run.luau` (lib/ modules and the block end to end).
 local check = require("./check")
 require("./test_usage")
 require("./test_text")

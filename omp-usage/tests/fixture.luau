@@ -1,6 +1,6 @@
 --!strict
--- `omp usage --json` örnekleri, gerçek çıktının biçiminde (alanlar omp'nin
--- verdiği gibi; kimlikler uydurma). İki profil aynı Claude hesabını görür.
+-- `omp usage --json` samples in the shape of the real output (fields as omp
+-- gives them; identifiers are made up). Two profiles see the same Claude account.
 
 local fixture = {}
 
@@ -54,7 +54,7 @@ local function codex(): any
 				amount = { used = 13, limit = 100 },
 			},
 			{
-				-- Kullanımı bilinmeyen limit: hiç alan yok.
+				-- A limit with unknown usage: no fields at all.
 				id = "openai-codex:secondary",
 				label = "7 days",
 				scope = { provider = "openai-codex", windowId = "7d" },
@@ -90,7 +90,7 @@ local function antigravity(): any
 	}
 end
 
---- `default` profili: eski (fetchedAt 100) Claude raporu, Codex, Antigravity, sorunlar.
+--- The `default` profile: an older (fetchedAt 100) Claude report, Codex, Antigravity, problems.
 function fixture.default(): any
 	return {
 		generatedAt = 1,
@@ -103,7 +103,7 @@ function fixture.default(): any
 	}
 end
 
---- `work` profili: aynı Claude hesabı (büyük/küçük harf farkıyla), daha taze; aynı sorunlu hesap.
+--- The `work` profile: the same Claude account (differing in letter case), fresher; the same problem account.
 function fixture.work(): any
 	local fresh = claude(200, 0.6, 0.7)
 	fresh.metadata.email = "ada@example.com"

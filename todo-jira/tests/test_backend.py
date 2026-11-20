@@ -13,7 +13,7 @@ from backend import Jira, UserError, adf_markdown, adf_plain, md_to_adf
 class IssueServer(Jira):
     def __init__(self):
         self.owner = "emir"
-        self.title = "Eski başlık"
+        self.title = "Old title"
         self.status = {"id": "3", "name": "In Progress", "statusCategory": {"key": "indeterminate"}}
         self.stored = []
 
@@ -54,27 +54,27 @@ class JiraWriteTests(unittest.TestCase):
 
     def test_stale_title_and_reassigned_issue_are_not_written(self):
         jira = IssueServer()
-        change = dict(self.issue, field="title", before="Eski başlık", value="Panodaki başlık")
-        jira.title = "Başka birinin düzenlemesi"
-        with self.assertRaisesRegex(UserError, "Jira’da değişmiş"):
+        change = dict(self.issue, field="title", before="Old title", value="Board title")
+        jira.title = "Someone else's edit"
+        with self.assertRaisesRegex(UserError, "changed in Jira"):
             jira.change(change)
-        self.assertEqual(jira.title, "Başka birinin düzenlemesi")
-        jira.title = "Eski başlık"
+        self.assertEqual(jira.title, "Someone else's edit")
+        jira.title = "Old title"
         jira.owner = "someone-else"
-        with self.assertRaisesRegex(UserError, "bu Jira hesabına ait değil"):
+        with self.assertRaisesRegex(UserError, "no longer assigned to this Jira account"):
             jira.change(change)
-        self.assertEqual(jira.title, "Eski başlık")
+        self.assertEqual(jira.title, "Old title")
 
     def test_title_and_available_transition_are_applied_to_the_exact_issue(self):
         jira = IssueServer()
-        self.assertEqual(jira.change(dict(self.issue, field="title", before="Eski başlık", value="Yeni başlık"))["title"], "Yeni başlık")
-        with self.assertRaisesRegex(UserError, "kullanılamıyor"):
+        self.assertEqual(jira.change(dict(self.issue, field="title", before="Old title", value="New title"))["title"], "New title")
+        with self.assertRaisesRegex(UserError, "no longer available"):
             jira.change(dict(self.issue, field="status", before="3", value="8", lane="Todo"))
         self.assertEqual(jira.change(dict(self.issue, field="status", before="3", value="8", lane="Done"))["status"], "9")
 
     def test_identical_reviewed_memory_is_not_posted_twice(self):
         jira = IssueServer()
-        payload = dict(self.issue, text="Güç kaybı senaryosu doğrulandı.")
+        payload = dict(self.issue, text="Power-loss scenario verified.")
         self.assertEqual(jira.comment(payload), jira.comment(payload))
         self.assertEqual([c["body"]["content"][0]["content"][0]["text"] for c in jira.stored], [payload["text"]])
 
@@ -83,35 +83,35 @@ class AdfTests(unittest.TestCase):
     def test_comment_structure_survives_as_markdown(self):
         text = lambda t, *marks: {"type": "text", "text": t, "marks": list(marks)}
         doc = {"type": "doc", "version": 1, "content": [
-            {"type": "heading", "attrs": {"level": 3, "localId": "h"}, "content": [text("Kök neden")]},
+            {"type": "heading", "attrs": {"level": 3, "localId": "h"}, "content": [text("Root cause")]},
             {"type": "bulletList", "content": [
-                {"type": "listItem", "content": [{"type": "paragraph", "content": [text("ST-LINK", {"type": "strong"}), text(" takılıyor")]}]},
+                {"type": "listItem", "content": [{"type": "paragraph", "content": [text("ST-LINK", {"type": "strong"}), text(" gets stuck")]}]},
                 {"type": "listItem", "content": [{"type": "paragraph", "content": [
-                    text("rapor", {"type": "link", "attrs": {"href": "https://example.com/r"}})]}]},
+                    text("report", {"type": "link", "attrs": {"href": "https://example.com/r"}})]}]},
             ]},
             {"type": "table", "content": [
-                {"type": "tableRow", "content": [{"type": "tableHeader", "content": [{"type": "paragraph", "content": [text("Kod")]}]},
-                                                 {"type": "tableHeader", "content": [{"type": "paragraph", "content": [text("Anlam")]}]}]},
+                {"type": "tableRow", "content": [{"type": "tableHeader", "content": [{"type": "paragraph", "content": [text("Code")]}]},
+                                                 {"type": "tableHeader", "content": [{"type": "paragraph", "content": [text("Meaning")]}]}]},
                 {"type": "tableRow", "content": [{"type": "tableCell", "content": [{"type": "paragraph", "content": [text("STM-C01")]}]},
                                                  {"type": "tableCell", "content": [{"type": "paragraph", "content": [text("a|b")]}]}]},
             ]},
             {"type": "mediaSingle", "content": [{"type": "media", "attrs": {"id": "x"}}]},
         ]}
         self.assertEqual(adf_markdown(doc), "\n\n".join([
-            "### Kök neden",
-            "- **ST-LINK** takılıyor\n- [rapor](https://example.com/r)",
-            "| Kod | Anlam |\n| --- | --- |\n| STM-C01 | a\\|b |",
-            "*[ek]*",
+            "### Root cause",
+            "- **ST-LINK** gets stuck\n- [report](https://example.com/r)",
+            "| Code | Meaning |\n| --- | --- |\n| STM-C01 | a\\|b |",
+            "*[attachment]*",
         ]))
-        self.assertEqual(adf_plain(doc).splitlines()[0], "Kök neden")
+        self.assertEqual(adf_plain(doc).splitlines()[0], "Root cause")
 
 
 class VaultTests(unittest.TestCase):
-    issue = dict(key="TASK-15", id="10015", title="Kurtarma", status_name="Devam", lane="Doing",
+    issue = dict(key="TASK-15", id="10015", title="Recovery", status_name="Active", lane="Doing",
                  url="https://x.atlassian.net/browse/TASK-15", updated="2026-11-18 10:00",
-                 comments=[dict(id="7", mine=True, created="2026-11-10 09:00", text="### İlk rapor\n\nayrıntı",
+                 comments=[dict(id="7", mine=True, created="2026-11-10 09:00", text="### First report\n\ndetails",
                                 url="https://x.atlassian.net/browse/TASK-15?focusedCommentId=7"),
-                           dict(id="8", mine=False, created="2026-11-11 09:00", text="başkası", url="u")])
+                           dict(id="8", mine=False, created="2026-11-11 09:00", text="someone else's", url="u")])
 
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
@@ -125,37 +125,37 @@ class VaultTests(unittest.TestCase):
         vault.sync([dict(self.issue)])
         path = vault.note_path("TASK-15")
         text = path.read_text(encoding="utf-8")
-        self.assertIn("[7](https://x.atlassian.net/browse/TASK-15?focusedCommentId=7) · İlk rapor", text)
-        self.assertNotIn("başkası", text)
-        edited = text.replace("## Log\n", "## Log\n\n- 2026-11-12 · elle yazılan satır\n")
-        edited = edited.replace("---\n", "---\nowner: emir\n", 1).replace("title: Kurtarma", "title: eski")
+        self.assertIn("[7](https://x.atlassian.net/browse/TASK-15?focusedCommentId=7) · First report", text)
+        self.assertNotIn("someone else's", text)
+        edited = text.replace("## Log\n", "## Log\n\n- 2026-11-12 · hand-written line\n")
+        edited = edited.replace("---\n", "---\nowner: emir\n", 1).replace("title: Recovery", "title: old")
         path.write_text(edited, encoding="utf-8")
-        moved = dict(self.issue, title="Kurtarma testi", comments=[])
+        moved = dict(self.issue, title="Recovery test", comments=[])
         drafts, written = vault.sync([moved])
         after = path.read_text(encoding="utf-8")
         self.assertEqual((drafts, written), ([], [path]))
-        self.assertIn("- 2026-11-12 · elle yazılan satır", after)
+        self.assertIn("- 2026-11-12 · hand-written line", after)
         self.assertIn("owner: emir", after)
-        self.assertIn("title: Kurtarma testi", after)
-        self.assertNotIn("title: eski", after)
-        self.assertNotIn("İlk rapor", after)
+        self.assertIn("title: Recovery test", after)
+        self.assertNotIn("title: old", after)
+        self.assertNotIn("First report", after)
         self.assertEqual(vault.sync([moved])[1], [])
 
     def test_draft_is_offered_once_filled_and_cleared_only_if_unchanged(self):
         vault.sync([dict(self.issue)])
         path = vault.note_path("TASK-15")
-        draft = "Kurtarma senaryosu geçti.\n\n- güç kaybı denendi"
+        draft = "Recovery scenario passed.\n\n- power loss tried"
         text = path.read_text(encoding="utf-8")
         path.write_text(text.replace("## Jira draft\n", f"## Jira draft\n\n{draft}\n"), encoding="utf-8")
         drafts, _ = vault.sync([dict(self.issue)])
         self.assertEqual([d["text"] for d in drafts], [draft])
-        vault.clear_draft("TASK-15", "başka metin")
+        vault.clear_draft("TASK-15", "other text")
         self.assertEqual(len(vault.sync([dict(self.issue)])[0]), 1)
         vault.clear_draft("TASK-15", draft)
         self.assertEqual(vault.sync([dict(self.issue)])[0], [])
 
     def test_markdown_draft_compares_equal_after_jira_adds_attrs(self):
-        adf = md_to_adf("**Sonuç** geçti\nikinci satır\n\n- a\n- b\n\n```c\nx = 1;\n```")
+        adf = md_to_adf("**Result** passed\nsecond line\n\n- a\n- b\n\n```c\nx = 1;\n```")
         self.assertEqual([b["type"] for b in adf["content"]], ["paragraph", "bulletList", "codeBlock"])
         stored = json.loads(json.dumps(adf))
         for block in stored["content"]:

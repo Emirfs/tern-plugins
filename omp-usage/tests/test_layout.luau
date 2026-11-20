@@ -2,7 +2,7 @@
 local check = require("./check")
 local layout = require("../lib/layout")
 
--- İki sağlayıcı: biri tek hesaplı, biri iki hesaplı; iki pencere.
+-- Two providers: one with a single account, one with two; two windows.
 local SHAPE = { 1, 2 }
 
 do

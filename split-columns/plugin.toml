@@ -1,7 +1,7 @@
 schema = 1
 id = "split-columns"
-name = "Bağımsız sütunlar"
+name = "Split columns"
 version = "0.2.0"
-description = "Satır satır bölünmüş ızgarayı sütunlara çevirir: her sütunun yatay ayracı ayrı oynar, sağdakini kaydırınca soldaki kımıldamaz."
+description = "Turns grids split row by row into columns: each column's horizontal divider moves on its own, so dragging the right one does not move the left one."
 icon = "columns"
 window = "window.luau"

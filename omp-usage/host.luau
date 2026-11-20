@@ -1,13 +1,12 @@
 --!strict
--- `accounts` bloğu: her omp profili için `omp usage --json` çalıştırır,
--- aynı hesabı (sağlayıcı + e-posta/org) profiller arasında tekilleştirir ve
--- kalan limitleri hesap hesap, sağlayıcı başına toplamlarıyla gösterir.
--- Toplama `lib/usage`, boyut kararları `lib/layout`, metinler `lib/i18n` içinde.
+-- The `accounts` block: runs `omp usage --json` for every omp profile,
+-- deduplicates the same account (provider + e-mail/org) across profiles and
+-- shows the remaining limits account by account, with per-provider totals.
+-- Aggregation lives in `lib/usage`, size decisions in `lib/layout`, text in `lib/text`.
 --
--- Tuşlar: r yenile, R omp'nin kullanım önbelleğini temizleyip yenile, l dil.
+-- Keys: r refresh, R clear omp's usage cache and refresh.
 
 local fmt = require("./lib/fmt")
-local i18n = require("./lib/i18n")
 local layout = require("./lib/layout")
 local usage = require("./lib/usage")
 
@@ -19,12 +18,14 @@ type Issue = usage.Issue
 type Layout = layout.Layout
 type Strings = { [string]: string }
 
+local L: Strings = require("./lib/text")
+
 local ui = tern.ui
 
 local REFRESH_MS = 2 * 60 * 1000
 local TICK_MS = 30 * 1000
 local OMP_TIMEOUT_MS = 60 * 1000
--- Son başarılı çekimin kırpılmış kopyası: yeni pane ilk çekim bitmeden çizer.
+-- Trimmed copy of the last successful fetch: a new pane draws from it before its first fetch finishes.
 local CACHE_KEY = "cache"
 local CACHE_VERSION = 1
 
@@ -35,15 +36,15 @@ local PROVIDER_NAMES = {
 	["github-copilot"] = "Copilot",
 }
 
--- Bir profil çalıştırmasının hatası; metne görünüm, o anki dilde çevirir.
+-- The error of one profile run; the view turns it into text in the current language.
 type RunError = { code: string, detail: string?, status: number? }
 
 type ProfileRun = {
 	name: string,
-	-- Son başarılı çıktı (kırpılmış); sonraki çekim başarısız olsa da kalır.
+	-- Last successful output (trimmed); it stays even if a later fetch fails.
 	data: any?,
 	err: RunError?,
-	-- `data`nın alındığı an (epoch s).
+	-- When `data` was fetched (epoch s).
 	at: number?,
 }
 
@@ -53,21 +54,17 @@ type State = {
 	order: { string },
 	loading: boolean,
 	fetched: number?,
-	-- Veri önbellekten geliyor, bu blok henüz kendi çekimini bitirmedi.
+	-- The data comes from the cache; this block has not finished its own fetch yet.
 	cached: boolean,
 	timer: TimerHandle?,
 	ticks: number,
 }
 
--- Pane id'si yeniden başlatmada aynı kalır; state nesnesi bu çalışmayı tanımlar.
+-- A pane id stays the same across restarts; the state object identifies this run.
 local running: { [number]: State } = {}
 
-local function strings(): Strings
-	return i18n.strings(i18n.current(tern))
-end
-
 ---------------------------------------------------------------------------
--- Ortam: ev dizini, profiller, omp yürütülebilir dosyası
+-- Environment: home directory, profiles, the omp executable
 
 local function home_dir(): string?
 	return tern.getenv("USERPROFILE") or tern.getenv("HOME")
@@ -81,7 +78,7 @@ local function join(a: string, b: string): string
 	return a .. sep .. b
 end
 
--- Varsayılan profil (~/.omp/agent) ve ~/.omp/profiles altındaki her profil.
+-- The default profile (~/.omp/agent) and every profile under ~/.omp/profiles.
 local function discover_profiles(): { string }
 	local found: { string } = {}
 	local home = home_dir()
@@ -104,8 +101,8 @@ local function discover_profiles(): { string }
 	return found
 end
 
--- Daemon'un PATH'i kabuğunkinden dar olabilir: önce adıyla, sonra bu işletim
--- sisteminde omp'nin kurulduğu bilinen yerler.
+-- The daemon's PATH can be narrower than the shell's: try the bare name first, then
+-- the places omp is known to be installed on this operating system.
 local function omp_candidates(): { string }
 	local list = { "omp" }
 	local home = home_dir()
@@ -133,10 +130,10 @@ local function omp_candidates(): { string }
 	return list
 end
 
--- `omp [--profile P] <args>` çalıştırır. OMP_PROFILE, daemon ortamından
--- sızabilecek PI_PROFILE'ı ezer; varsayılan profilde PI_CODING_AGENT_DIR de
--- sabitlenir. Hiçbir aday başlamazsa son başlatma hatasını döndürür (yoksa nil:
--- "bulunamadı").
+-- Runs `omp [--profile P] <args>`. OMP_PROFILE overrides a PI_PROFILE that may
+-- leak in from the daemon's environment; for the default profile
+-- PI_CODING_AGENT_DIR is pinned too. If no candidate starts, returns the last spawn
+-- error (nil if there was none: "not found").
 local function run_omp(profile: string, args: { string }, done: (ProcessResult) -> ()): (boolean, string?)
 	local env: { [string]: string } = { OMP_PROFILE = profile, NO_COLOR = "1" }
 	local home = home_dir()
@@ -167,7 +164,7 @@ local function run_omp(profile: string, args: { string }, done: (ProcessResult) 
 end
 
 ---------------------------------------------------------------------------
--- Önbellek: son başarılı çekim, `tern.kv` içinde (bütün pane'ler ve pencereler paylaşır)
+-- Cache: the last successful fetch, in `tern.kv` (shared by all panes and windows)
 
 local function load_cache(state: State)
 	local ok, cache = pcall(tern.kv.get, CACHE_KEY)
@@ -205,7 +202,7 @@ local function store_cache(state: State)
 end
 
 ---------------------------------------------------------------------------
--- Yaşam döngüsü ve veri çekme
+-- Lifecycle and fetching
 
 local function retire(state: State)
 	if running[state.cx.pane] == state then
@@ -218,7 +215,7 @@ local function retire(state: State)
 	state.loading = false
 end
 
--- Bloğun kapanma kancası yok: geri çağrılar kaybolan pane'i kendileri emekliye ayırır.
+-- The block has no close hook: callbacks retire a vanished pane themselves.
 local function alive(state: State): boolean
 	if running[state.cx.pane] ~= state then
 		return false
@@ -232,7 +229,7 @@ local function alive(state: State): boolean
 	return false
 end
 
--- Her profil için `args` çalıştırır; hepsi bitince `finish` çağrılır.
+-- Runs `args` for every profile; `finish` is called once all are done.
 local function each_profile(
 	state: State,
 	args: { string },
@@ -267,7 +264,7 @@ local function each_profile(
 	end
 end
 
--- Bir çalıştırmanın sonucu: veri ya da hata. Hata önceki veriyi silmez.
+-- The result of one run: data or an error. An error does not discard earlier data.
 local function apply_result(run: ProfileRun, result: ProcessResult?, spawn_error: RunError?)
 	if spawn_error then
 		run.err = spawn_error
@@ -303,7 +300,7 @@ local function refresh(state: State, invalidate: boolean?)
 			if not alive(state) then
 				return
 			end
-			-- Artık bulunmayan profilleri at.
+			-- Drop profiles that no longer exist.
 			for name in state.profiles do
 				if not table.find(state.order, name) then
 					state.profiles[name] = nil
@@ -328,8 +325,8 @@ local function refresh(state: State, invalidate: boolean?)
 	end
 end
 
--- Tek bir bekleyen zamanlayıcı: her 30 sn sıfırlanma sayaçlarını tazeler,
--- her REFRESH_MS'de bir veriyi yeniden çeker.
+-- A single pending timer: every 30 s it refreshes the reset countdowns,
+-- every REFRESH_MS it fetches the data again.
 local function schedule(state: State)
 	if not alive(state) or state.timer then
 		return
@@ -350,7 +347,7 @@ local function schedule(state: State)
 end
 
 ---------------------------------------------------------------------------
--- Görünüm
+-- View
 
 local function with(node: Node, props: { [string]: any }): Node
 	local p: { [string]: any } = node.p or {}
@@ -373,7 +370,7 @@ local function shape_of(providers: { Provider }): layout.Shape
 	return shape
 end
 
--- Kalan orana göre renk: biten kırmızı, %20 altı sarı, gerisi temanın vurgu rengi.
+-- Colour by remaining fraction: exhausted is red, under 20% yellow, the rest the theme's accent colour.
 local function level_tone(left: number, status: string?): string?
 	if left <= 0.0001 or status == "exhausted" then
 		return "error"
@@ -389,7 +386,7 @@ local function remaining_spans(used: number, status: string?, L: Strings, suffix
 	return { ui.span(fmt.pct(left, L) .. (suffix or ""), if tone then tone .. " strong" else "strong") }
 end
 
--- Dolu çubuk = kalan kota (pil gibi), az kalınca sarı/kırmızı.
+-- A full bar = remaining quota (like a battery), yellow/red when little is left.
 local function remaining_meter_cell(cell: Cell): MeterCell
 	local left = 1 - cell.used
 	local m = ui.meter_cell(left)
@@ -400,7 +397,7 @@ local function remaining_meter_cell(cell: Cell): MeterCell
 	return m
 end
 
--- E-postanın yerel kısmı ve varsa org/plan: "emir.sari · Inohom".
+-- The local part of the e-mail and, if any, the org/plan: "emir.sari · Inohom".
 local function who(acc: Account, L: Strings): string
 	local label = acc.label or L.unknown_account
 	local name = string.match(label, "^([^@]+)@") or label
@@ -416,7 +413,7 @@ local function account_label(acc: Account, lead: { Span | string }, tone: string
 	return spans
 end
 
--- Bir satırın pencere hücreleri: kalan, (çubuk), (sıfırlanma ya da toplam notu).
+-- The window cells of a row: remaining, (bar), (reset or total note).
 local function window_cells(row: { any }, lay: Layout, cell: Cell?, note: { Span | string }?, L: Strings)
 	if cell == nil then
 		table.insert(row, { ui.span("—", "dim") })
@@ -431,8 +428,8 @@ local function window_cells(row: { any }, lay: Layout, cell: Cell?, note: { Span
 	end
 end
 
--- Birden çok hesabı olan sağlayıcının pencere toplamı: hesapların kalan
--- kotasının ortalaması, yani toplam kotanın kalan yüzdesi.
+-- The window total of a provider with several accounts: the mean of the accounts'
+-- remaining quota, i.e. the remaining percentage of the combined quota.
 local function total_cell(prov: Provider, key: string, L: Strings): (Cell?, { Span | string }?)
 	local used, n = 0, 0
 	for _, acc in prov.accounts do
@@ -448,7 +445,7 @@ local function total_cell(prov: Provider, key: string, L: Strings): (Cell?, { Sp
 	return { used = used / n }, { ui.span(L.total, "muted") }
 end
 
--- Görünümün bir satırı: etiket ve sütun başına hücre (toplam satırında not).
+-- One row of the view: a label and a cell per column (a note on the total row).
 type Line = { label: { Span | string }, cells: { [number]: Cell }, notes: { [number]: { Span | string } } }
 
 local function account_line(label: { Span | string }, acc: Account, columns: { Column }): Line
@@ -459,7 +456,7 @@ local function account_line(label: { Span | string }, acc: Account, columns: { C
 	return { label = label, cells = cells, notes = {} }
 end
 
--- Tek hesaplı sağlayıcı bir satır; çok hesaplıda toplam satırı ve (sığarsa) altında hesaplar.
+-- A single-account provider is one row; a multi-account one gets a total row and (if it fits) the accounts below it.
 local function lines_of(providers: { Provider }, columns: { Column }, lay: Layout, L: Strings): { Line }
 	local out: { Line } = {}
 	for _, prov in providers do
@@ -494,8 +491,8 @@ local function lines_of(providers: { Provider }, columns: { Column }, lay: Layou
 	return out
 end
 
--- Tablo: sütunlar en düşük öncelikten gizlenir (çubuk, sıfırlanma, sonraki
--- pencereler); etiket ve ilk pencere en son.
+-- Table: columns are hidden starting from the lowest priority (bar, reset, later
+-- windows); the label and the first window go last.
 local function table_view(lines: { Line }, columns: { Column }, lay: Layout, L: Strings): Node
 	local cols: { Col } = { { id = "account", head = L.col_account, grow = 1, truncate = "end", priority = 3 } }
 	for i, c in columns do
@@ -518,8 +515,8 @@ local function table_view(lines: { Line }, columns: { Column }, lay: Layout, L: 
 	return with(ui.table(cols, rows), { key = "accounts" })
 end
 
--- En dar pane: tablo etiketi taşıyamaz; liste etiketi kırpar, sığan kadar
--- pencerenin yüzdesi sağda kalır.
+-- Narrowest pane: the table cannot carry the label; the list truncates the label
+-- and keeps as many window percentages on the right as fit.
 local function list_view(lines: { Line }, columns: { Column }, cx: BlockCx, L: Strings): Node
 	local shown = math.clamp(math.floor((cx.cols - 9) / 5), 1, math.max(1, #columns))
 	local heads: { string } = {}
@@ -549,8 +546,8 @@ local function list_view(lines: { Line }, columns: { Column }, cx: BlockCx, L: S
 	return with(ui.list(items), { key = "accounts-list" })
 end
 
--- Geniş ve uzun pane için yığılı görünümün bir pencere satırı: pencere adı,
--- kalan yüzde, kalanı gösteren çubuk ve yenilenmeye kalan süre.
+-- One window row of the stacked view for wide and tall panes: window name,
+-- remaining percentage, a bar showing what is left, and the time until it refreshes.
 local function window_row(c: Column, cell: Cell?, wide: boolean, key: string, L: Strings): Node
 	local name = with(ui.text({ ui.span(c.label, "muted") }), { min = { w = "8ch" } })
 	if cell == nil then
@@ -572,8 +569,8 @@ local function window_row(c: Column, cell: Cell?, wide: boolean, key: string, L:
 	}), { key = key, role = "omp-usage.window" })
 end
 
--- Sağlayıcı başlığı: tek hesapta hesap adı, çok hesapta hesap sayısı ve
--- pencere başına toplam kalan.
+-- Provider heading: the account name for a single account; for several, the
+-- account count and the total remaining per window.
 local function provider_header(prov: Provider, columns: { Column }, L: Strings): Node
 	local spans: { Span | string } = { ui.span(provider_name(prov.id), "strong") }
 	if #prov.accounts == 1 then
@@ -596,8 +593,8 @@ local function provider_header(prov: Provider, columns: { Column }, L: Strings):
 	return with(ui.text(spans), { key = "head", role = "omp-usage.provider" })
 end
 
--- Boş alanı okunabilirliğe harcayan görünüm: sağlayıcı grupları ayraçla
--- ayrılır, her hesabın her penceresi kendi çubuğuyla bir satır. Sığmazsa nil.
+-- The view that spends free space on readability: provider groups are separated
+-- by a rule, every window of every account gets a row with its own bar. nil if it does not fit.
 local function roomy_view(providers: { Provider }, columns: { Column }, status: { Node }, cx: BlockCx, L: Strings): { Node }?
 	local fits, wide = layout.roomy(shape_of(providers), #columns, #status, cx.cols, cx.rows)
 	if not fits then
@@ -625,8 +622,8 @@ local function roomy_view(providers: { Provider }, columns: { Column }, status: 
 	return children
 end
 
--- Hesap görünümü ve sığdığı kadar durum satırı: yer varsa yığılı görünüm,
--- yoksa tablo, en darda liste.
+-- The accounts view plus as many status lines as fit: the stacked view if there
+-- is room, else the table, and at the narrowest the list.
 local function accounts_view(providers: { Provider }, status: { Node }, cx: BlockCx, L: Strings): { Node }
 	local columns = usage.columns_of(providers, L)
 	local roomy = roomy_view(providers, columns, status, cx, L)
@@ -637,7 +634,7 @@ local function accounts_view(providers: { Provider }, status: { Node }, cx: Bloc
 	local lines = lines_of(providers, columns, lay, L)
 	local body = if lay.tiny then list_view(lines, columns, cx, L) else table_view(lines, columns, lay, L)
 	local children: { Node } = { body }
-	-- Yer yoksa sade durum satırı düşer; sorun satırı her zaman kalır.
+	-- Without room the plain status line is dropped; the problem line always stays.
 	local room = lay.capacity - lay.table_lines
 	for i, line in status do
 		if i > 1 or room >= #status then
@@ -668,8 +665,8 @@ local function issue_text(it: Issue, L: Strings): string
 	return if it.kind == "disabled" then string.format(L.issue_disabled, it.detail or "") else L.issue_no_report
 end
 
--- Tablonun altındaki durum satırı; sorun varsa ikinci satır (profil hatası ya
--- da devre dışı hesap). Dock yerine ana bölgede: dock pane'in alt kenarında kırpılıyor.
+-- The status line under the table; if there is a problem, a second line (a profile error
+-- or a disabled account). In the main region, not the dock: the dock clips at the pane's bottom edge.
 local function status_lines(state: State, issues: { Issue }, L: Strings): { Node }
 	local status: { Span | string } = { ui.span(string.format(L.profiles, #state.order), "muted") }
 	if state.loading and not state.cached then
@@ -678,7 +675,7 @@ local function status_lines(state: State, issues: { Issue }, L: Strings): { Node
 		local text = string.format(L.updated, os.date("%H:%M", state.fetched))
 		table.insert(status, ui.span(if state.cached then text .. L.cached else text, "muted"))
 	end
-	-- Dar pane'de ipucu satırı kaydırmasın diye düşer.
+	-- Dropped in a narrow pane so the hint line does not scroll.
 	if state.cx.cols >= layout.HINT_COLS then
 		table.insert(status, ui.span(L.hint, "dim"))
 	end
@@ -689,7 +686,7 @@ local function status_lines(state: State, issues: { Issue }, L: Strings): { Node
 		local run = state.profiles[name]
 		if run and run.err then
 			local text = name .. ": " .. error_text(run.err, L)
-			-- Hata önceki veriyi silmez; hangi anın verisi gösterildiğini söyle.
+			-- An error does not discard earlier data; say which moment's data is shown.
 			if run.data and run.at then
 				text ..= " — " .. string.format(L.stale, os.date("%H:%M", run.at))
 			end
@@ -733,7 +730,6 @@ tern.block.define("accounts", {
 	end,
 
 	title = function(state: State): string?
-		local L = strings()
 		if not has_data(state) then
 			return L.title
 		end
@@ -746,7 +742,6 @@ tern.block.define("accounts", {
 	end,
 
 	view = function(state: State, _cx: BlockCx): BlockView
-		local L = strings()
 		if not has_data(state) then
 			local main: Node
 			if state.loading or not state.fetched then
@@ -775,8 +770,6 @@ tern.block.define("accounts", {
 			refresh(state)
 		elseif k == "R" then
 			refresh(state, true)
-		elseif k == "l" then
-			tern.kv.set(i18n.KV_KEY, i18n.other(i18n.current(tern)))
 		else
 			return false
 		end

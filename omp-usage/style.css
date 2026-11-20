@@ -1,5 +1,5 @@
-/* Yığılı görünümde hiyerarşi: sağlayıcı başlığı öne çıkar, pencere satırları
-   hesabın altında girintili durur. Renkler temadan gelir. */
+/* Hierarchy in the stacked view: the provider heading stands out, window rows
+   sit indented under the account. Colours come from the theme. */
 
 .sf-main[data-surface='plugin.omp-usage.accounts'] [data-role='omp-usage.provider'] {
 	font-size: 1.12em;

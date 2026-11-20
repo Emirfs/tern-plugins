@@ -1,8 +1,8 @@
 schema = 1
 id = "omp-usage"
-name = "omp kullanım"
+name = "omp usage"
 version = "0.2.0"
-description = "Tüm omp profillerindeki hesapların kalan kullanım limitleri, hesap başına tekilleştirilmiş ve toplanmış."
+description = "Remaining usage limits of the accounts across all omp profiles, deduplicated per account and totalled."
 icon = "sparkle"
 host = "host.luau"
 window = "window.luau"
@@ -10,4 +10,4 @@ styles = ["style.css"]
 
 [[blocks]]
 id = "accounts"
-title = "omp kullanım"
+title = "omp usage"

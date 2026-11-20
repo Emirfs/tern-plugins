@@ -9,14 +9,14 @@ export type Parts = { [string]: boolean }
 export type Layout = { v: number, threshold: number, narrow: Parts, wide: Parts }
 
 Layout.PARTS = {
-	{ id = "toolbar", label = "Araç çubuğu" },
-	{ id = "sidebar", label = "Dallar, uzak dallar, etiketler (geniş: sol sütun, dar: üstte şerit)" },
-	{ id = "graph", label = "Grafik" },
-	{ id = "refs", label = "Dal ve etiket adları" },
-	{ id = "author", label = "Yazar" },
-	{ id = "age", label = "Zaman" },
+	{ id = "toolbar", label = "Toolbar" },
+	{ id = "sidebar", label = "Branches, remote branches, tags (wide: left column, narrow: strip on top)" },
+	{ id = "graph", label = "Graph" },
+	{ id = "refs", label = "Branch and tag names" },
+	{ id = "author", label = "Author" },
+	{ id = "age", label = "Age" },
 	{ id = "hash", label = "Hash" },
-	{ id = "detail", label = "Alt bölüm: commit, dosyalar ve diff" },
+	{ id = "detail", label = "Lower section: commit, files and diff" },
 }
 
 Layout.MIN, Layout.MAX, Layout.STEP = 40, 300, 10

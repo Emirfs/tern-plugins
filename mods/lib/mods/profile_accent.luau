@@ -1,18 +1,18 @@
 --!strict
--- omp profiline göre vurgu rengi. Hangi pane'in hangi profili çalıştırdığını
--- pencere yarısı `tern inspect --json`dan bulur (env.panes); burada yalnız CSS:
--- sekmede pane'in program simgesi `.tn-dk-c[data-pane=<id>]` taşır, sekmenin
--- kendisi `:has()` ile ondan bulunur. Sahnedeki pane'lerin kimlik niteliği yok;
--- başlıklarındaki `.tn-head[title]` pane başlığıyla eşleşir. Başlık çubuğu
--- görünmeyen pane (tek pane'li sekme, `pane_headers` kapalı) renk almaz.
+-- An accent color per omp profile. Which pane runs which profile is found by the
+-- window half from `tern inspect --json` (env.panes); only CSS is here:
+-- on a tab, the pane's program icon carries `.tn-dk-c[data-pane=<id>]` and the tab
+-- itself is found from it with `:has()`. Panes on the stage have no identity attribute;
+-- the `.tn-head[title]` in their headers is matched with the pane title. A pane
+-- whose header is not visible (a single-pane tab, `pane_headers` off) gets no color.
 
 local schema = require("../schema")
 
--- Rengi seçilmemiş profiller için sabit sıra: aynı ad her yerde aynı renk.
+-- A fixed order for profiles with no chosen color: the same name gets the same color everywhere.
 local AUTO = { "violet", "orange", "teal", "pink", "green", "yellow", "blue", "red" }
 
---- Profilin rengi (CSS) ya da nil (renksiz): seçilen renk, yoksa `default` renksiz,
---- diğerleri adlarından türeyen sabit bir palet rengi.
+--- A profile's color (CSS) or nil (no color): the chosen color, else `default` has none,
+--- the others a fixed palette color derived from their name.
 local function color_for(colors: { [string]: string }, profile: string): string?
 	local chosen = colors[profile]
 	if chosen == "none" then
@@ -35,7 +35,7 @@ local function css(s: schema.Settings, env: schema.Env): string?
 	local colors: { [string]: string } = s.colors
 	local edge = s.style ~= "tint"
 	local tint = s.style ~= "edge"
-	-- Odaktaki pane'ler sona: aynı sekmede iki profil varsa sekme odaktakinin rengini alır.
+	-- Focused panes go last: with two profiles in one tab, the tab takes the focused one's color.
 	local ordered = table.clone(env.panes)
 	table.sort(ordered, function(a, b)
 		if a.focused ~= b.focused then

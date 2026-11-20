@@ -1,7 +1,7 @@
 schema = 1
 id = "hermes-bridge"
-name = "Hermes köprüsü"
+name = "Hermes bridge"
 version = "0.1.0"
-description = "Carly, Hermes ve omp arasında köprü: Carly'ye Hermes/kanban/ESP araçları verir, `tern-bridge` komutunun kuyruğa koyduğu işleri (Carly'ye sor, omp başlat, cihaz sekmesi aç, bildirim) yürütür."
+description = "Bridge between Carly, Hermes and omp: gives Carly Hermes/kanban/ESP tools and runs the jobs the `tern-bridge` command queues (ask Carly, start omp, open a device tab, notify)."
 icon = "sparkle"
 window = "window.luau"

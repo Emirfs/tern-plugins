@@ -59,13 +59,13 @@ end
 
 local function open(cx: WindowCx, args: { string }?)
 	if cx:new_block(KIND, args, "beside") == nil then
-		cx:toast("error", "Git grafiği açılamadı", "Eklentinin host yarısı yüklenmemiş; `tern plugin list` ile bakın.")
+		cx:toast("error", "Could not open Git graph", "The plugin's host half is not loaded; check with `tern plugin list`.")
 	end
 end
 
 tern.command({
 	id = "open",
-	title = "Git grafiği: yeni panel (odaktaki terminali izler)",
+	title = "Git graph: new pane (follows the focused terminal)",
 	run = function(cx: WindowCx)
 		open(cx, nil)
 	end,
@@ -73,11 +73,11 @@ tern.command({
 
 tern.command({
 	id = "here",
-	title = "Git grafiği: bu klasörün deposu (sabit)",
+	title = "Git graph: this folder's repo (pinned)",
 	run = function(cx: WindowCx)
 		local cwd = focused_cwd(cx)
 		if cwd == nil then
-			cx:toast("info", "Odakta klasörü bilinen bir terminal yok")
+			cx:toast("info", "No terminal with a known folder is focused")
 			return
 		end
 		open(cx, { cwd })
@@ -86,7 +86,7 @@ tern.command({
 
 tern.command({
 	id = "pick",
-	title = "Git grafiği: depo seç",
+	title = "Git graph: pick a repo",
 	run = function(cx: WindowCx)
 		open(cx, { "--pick" })
 	end,

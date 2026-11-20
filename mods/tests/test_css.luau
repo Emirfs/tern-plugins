@@ -26,7 +26,7 @@ local function css(id: string, over: { [string]: any }?, env: schema.Env?): stri
 	return m.css(settings(id, over), env or EMPTY)
 end
 
--- Her mod, her seçim değeriyle: dengeli süslü parantez, biçim artığı yok.
+-- Each mod, with every option value: balanced braces, no formatting leftovers.
 for _, m in registry.BUILTIN do
 	local variants: { { [string]: any } } = { {} }
 	for _, f in m.fields do
@@ -77,7 +77,7 @@ do
 	check.eq(has(out, 'data-pane="7"'), false, "default has no color unless chosen")
 	check.truthy(has(out, 'data-pane="8"'), "an untitled pane still colors its tab")
 	check.eq(has(out, '[title=""]'), false, "an untitled pane has no pane rule")
-	-- Odaktaki pane'in kuralları sonda: aynı sekmede onun rengi kazanır.
+	-- The focused pane's rules go last: in the same tab its color wins.
 	check.truthy((string.find(out, "#112233", 1, true) :: number) > (string.find(out, "#3ecf8e", 1, true) :: number), "focused pane last")
 
 	local edge_only = css("profile-accent", { style = "edge", colors = { mine = "red" } }, env) :: string
@@ -139,10 +139,6 @@ do
 	check.truthy(has(quiet, ".tn-glow { display: none"), "quiet silences Tern's glow")
 	check.eq(has(quiet, "@keyframes"), false, "quiet adds no animation")
 	check.truthy(has(css("busy-animation", { style = "pulse", speed = 2 }), "mods-busy-pulse 2s"), "pulse speed")
-end
-
-do
-	check.truthy(has(css("parked", { look = "compact" }), ".pk-face, .pk-bb"), "compact hides the previews")
 end
 
 do

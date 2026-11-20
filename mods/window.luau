@@ -1,19 +1,19 @@
 --!strict
--- Pencere yarısı: açık modları `tern.css("mod-<id>", …)` ile uygular (sayfa adı
--- yalnız harf, rakam, `_`, `-` alır; Tern onu `plugin:local:mods:mod-<id>` yapar), kapananları
--- boşaltır; Görünüm ayarları `look` sayfasında. kv yarım saniyede bir okunur
--- (Tern kv dosyasını yalnız diskte değişince yeniden okur, okuma ucuz); bir sayfa
--- yalnız CSS'i değişince yeniden kurulur. Ayrıca palet komutları, odak modu
--- kısayolu ve panelin istediği yol alanı (cx:prompt yalnız burada var).
+-- Window half: applies the enabled mods with `tern.css("mod-<id>", …)` (a sheet name
+-- takes only letters, digits, `_` and `-`; Tern makes it `plugin:local:mods:mod-<id>`) and
+-- clears the disabled ones; Appearance settings go in the `look` sheet. kv is read twice a
+-- second (Tern rereads the kv file only when it changes on disk, so a read is cheap); a sheet
+-- is rebuilt only when its CSS changed. Also the palette commands, the focus mode
+-- shortcut and the path prompt the panel asks for (cx:prompt exists only here).
 
 local appearance = require("./lib/appearance")
-local i18n = require("./lib/i18n")
+local strings = require("./lib/strings")
 local panel = require("./lib/panel")
 local registry = require("./lib/registry")
 local schema = require("./lib/schema")
 
 local TICK_MS = 500
--- Kullanıcı klasörü her bu kadar tikte bir taranır.
+-- The user folder is scanned once every this many ticks.
 local USER_SCAN_TICKS = 4
 local PANEL_KIND = "mods.panel"
 local FOCUS_KEY = "ctrl+alt+z"
@@ -23,9 +23,9 @@ local WALLPAPER_MAX_BYTES = 16 * 1024 * 1024
 
 pcall(tern.fs.mkdir, USER_DIR)
 
-local L = i18n.strings(i18n.current(tern))
+local L = strings.text
 
--- Kurulu sayfalar: ad → CSS ("" boş).
+-- Installed sheets: name → CSS ("" is empty).
 local applied: { [string]: string } = {}
 
 local function apply_sheet(name: string, css: string?)
@@ -36,9 +36,9 @@ local function apply_sheet(name: string, css: string?)
 	end
 end
 
--- omp profilleri ------------------------------------------------------------
--- omp-profile eklentisinin yolu: `tern inspect --json` her pane'in omp oturum
--- dosyasını verir; `~/.omp/profiles/<ad>/…` → <ad>, `~/.omp/agent/…` → default.
+-- omp profiles --------------------------------------------------------------
+-- Path of the omp-profile plugin: `tern inspect --json` gives each pane's omp session
+-- file; `~/.omp/profiles/<name>/…` → <name>, `~/.omp/agent/…` → default.
 
 local profiles: { [number]: string } = {}
 local inspecting = false
@@ -133,8 +133,8 @@ local function panes_env(cx: WindowCx?): { schema.PaneEnv }
 	return out
 end
 
--- Duvar kağıdı --------------------------------------------------------------
--- Görselin baytları `data:` URL'si olur; aynı dosya için bir kez kodlanır.
+-- Wallpaper -----------------------------------------------------------------
+-- The image's bytes become a `data:` URL; encoded once per file.
 
 local wp_cache: { key: string, url: string }? = nil
 
@@ -189,7 +189,7 @@ local function wallpaper_env(s: schema.Settings, env: schema.Env)
 	env.wallpaper_url = data_url(s.image)
 end
 
--- Uygulama ------------------------------------------------------------------
+-- Applying ------------------------------------------------------------------
 
 local user_cache: { registry.UserMod } = {}
 local ticks = 0
@@ -229,7 +229,7 @@ local function sync(cx: WindowCx?)
 		seen["mod-" .. u.id] = true
 		apply_sheet("mod-" .. u.id, if on[u.id] then read_user(u.file) else nil)
 	end
-	-- Silinen kullanıcı dosyasının sayfası da kalksın.
+	-- A deleted user file's sheet goes away too.
 	for name, text in applied do
 		if string.sub(name, 1, 9) == "mod-user-" and not seen[name] and text ~= "" then
 			apply_sheet(name, nil)
@@ -237,7 +237,7 @@ local function sync(cx: WindowCx?)
 	end
 end
 
--- Panelin yol isteği: Tern'in yol alanı açılır, girilen yol ayara yazılır.
+-- The panel's path request: Tern's path prompt opens and the entered path is written to the setting.
 local handled_pick: string? = nil
 do
 	local req = tern.kv.get("pick_req")
@@ -256,15 +256,13 @@ local function check_pick(cx: WindowCx?)
 		return
 	end
 	local cur = registry.settings(m, tern.kv.get(registry.KEY_CFG))[key]
-	local now = i18n.strings(i18n.current(tern))
-	cx:prompt({ value = cur, placeholder = now.image_prompt, icon = "image" }):next(function(text: string?)
+	cx:prompt({ value = cur, placeholder = L.image_prompt, icon = "image" }):next(function(text: string?)
 		if text == nil then
 			return
 		end
-		-- Explorer'ın "Yol olarak kopyala"sı tırnaklı verir.
+		-- Explorer's "Copy as path" gives a quoted path.
 		local path = string.gsub(string.gsub(text, '^%s*"?', ""), '"?%s*$', "")
 		local d: panel.Data = {
-			lang = i18n.current(tern),
 			on = {},
 			cfg = tern.kv.get(registry.KEY_CFG),
 			look = {},
@@ -275,7 +273,7 @@ local function check_pick(cx: WindowCx?)
 		for _, w in panel.change(d, `set.{m.id}.{key}`, path) do
 			tern.kv.set(w.key, w.value)
 		end
-		-- Görsel seçmek kaynağı da görsele çevirir.
+		-- Choosing an image also switches the source to image.
 		if m.id == "wallpaper" and path ~= "" then
 			d.cfg = tern.kv.get(registry.KEY_CFG)
 			for _, w in panel.change(d, "set.wallpaper.source", "image") do
@@ -287,7 +285,7 @@ end
 
 local function tick()
 	tern.timer(TICK_MS, function(cx: WindowCx?)
-		-- Önce sıradaki: bir hata zinciri koparmasın.
+		-- Schedule the next tick first: an error must not break the chain.
 		tick()
 		ticks += 1
 		local ok, err = pcall(function()
@@ -307,7 +305,7 @@ local function poll_profiles()
 	end)
 end
 
--- Eklenti açık bir pencereye sonradan yüklenince window_start gelmez: yüklenirken de başla.
+-- When the plugin loads into an already open window, window_start never arrives: start on load too.
 sync(nil)
 inspect()
 tick()
@@ -334,27 +332,21 @@ tern.on("title", function(_ev: any, _cx: WindowCx)
 	end
 end)
 
--- Komutlar ------------------------------------------------------------------
+-- Commands ------------------------------------------------------------------
 
 local function is_panel(title: string): boolean
-	for _, t in i18n.titles() do
-		if title == t then
-			return true
-		end
-	end
-	return false
+	return title == L.title
 end
 
 local function toggle(cx: WindowCx, id: string)
 	local on = registry.enabled(tern.kv.get(registry.KEY_ON))
-	local now = i18n.strings(i18n.current(tern))
-	local name = now[id .. ".title"] or id
+	local name = L[id .. ".title"] or id
 	if on[id] then
 		on[id] = nil
-		cx:toast("info", string.format(now.toast_off, name))
+		cx:toast("info", string.format(L.toast_off, name))
 	else
 		on[id] = true
-		cx:toast("info", string.format(now.toast_on, name))
+		cx:toast("info", string.format(L.toast_on, name))
 	end
 	tern.kv.set(registry.KEY_ON, on)
 	sync(cx)
@@ -372,8 +364,7 @@ tern.command({
 			end
 		end
 		if cx:new_block(PANEL_KIND, nil, "beside") == nil then
-			local now = i18n.strings(i18n.current(tern))
-			cx:toast("error", now.not_loaded, now.not_loaded_detail)
+			cx:toast("error", L.not_loaded, L.not_loaded_detail)
 		end
 	end,
 })
@@ -414,18 +405,6 @@ tern.command({
 	run = function(cx: WindowCx)
 		tern.kv.set(registry.KEY_ON, {})
 		sync(cx)
-		cx:toast("info", i18n.strings(i18n.current(tern)).toast_all_off)
-	end,
-})
-
--- Palet başlıkları dili eklenti yüklenirken alır; açık panel hemen.
-tern.command({
-	id = "lang",
-	title = L.cmd_lang,
-	icon = "sliders",
-	run = function(cx: WindowCx)
-		local lang: i18n.Lang = i18n.other(i18n.current(tern))
-		tern.kv.set(i18n.KV_KEY, lang)
-		cx:toast("info", i18n.strings(lang).lang_switched)
+		cx:toast("info", L.toast_all_off)
 	end,
 })

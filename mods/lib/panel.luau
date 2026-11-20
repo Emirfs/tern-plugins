@@ -1,35 +1,33 @@
 --!strict
--- Ayar paneli: Tern'in yerel ayar sayfası (`prefs` düğümü, omp'nin /settings'i
--- de bunu çizer) için veriler ve satır değişikliklerinin kv'ye çevrilmesi.
--- Saf: kv'yi çağıran okur/yazar, burası yalnız tablo üretir.
+-- Settings panel: the data for Tern's native settings page (the `prefs` node, which
+-- omp's /settings draws too) and the translation of row changes into kv writes.
+-- Pure: the caller reads and writes kv, this file only builds tables.
 --
--- Satır kimlikleri (Tern değişiklikte `item` olarak geri yollar):
---   lang                     dil
---   look.<alan>              Görünüm ayarı
---   on.<mod>                 modu aç/kapat (kullanıcı modları da)
---   set.<mod>.<alan>         mod ayarı
---   set.<mod>.colors.<profil>  profile-accent'in profil rengi
--- Eylemler (`act`): preset=<ad>, alloff, folder, pick=<mod>.<alan>
+-- Row ids (Tern sends them back as `item` on a change):
+--   look.<field>             Appearance setting
+--   on.<mod>                 turn a mod on/off (user mods too)
+--   set.<mod>.<field>        mod setting
+--   set.<mod>.colors.<profile>  profile-accent's color for a profile
+-- Actions (`act`): preset=<name>, alloff, folder, pick=<mod>.<field>
 
 local appearance = require("./appearance")
-local i18n = require("./i18n")
+local strings = require("./strings")
 local registry = require("./registry")
 local schema = require("./schema")
 
 export type Data = {
-	lang: i18n.Lang,
 	on: { [string]: boolean },
-	-- kv'deki ham `cfg` (her şey olabilir); satırlar normalize edilmiş halini gösterir.
+	-- The raw `cfg` from kv (can be anything); rows show its normalized form.
 	cfg: any,
 	look: schema.Settings,
 	user: { registry.UserMod },
 	user_dir: string,
 	profiles: { string },
-	-- Duvar kağıdı görselinin satırının ikinci bilgisi (kare sayısı, hata…).
+	-- The second line of the wallpaper image row (frame count, error…).
 	image_note: string?,
 }
 
--- kv'ye yazılacak bir değer.
+-- A value to be written to kv.
 export type Write = { key: string, value: any }
 
 local panel = {}
@@ -53,7 +51,7 @@ local function shown(L: { [string]: string }, scope: string, f: schema.Field, v:
 	elseif f.kind == "color" then
 		return L["color." .. tostring(v)] or tostring(v)
 	elseif f.kind == "choice" then
-		return i18n.option(L, scope, f.key, v)
+		return strings.option(scope, f.key, v)
 	end
 	return tostring(v)
 end
@@ -68,12 +66,12 @@ local function field_control(L: { [string]: string }, scope: string, f: schema.F
 	end
 	local opts = {}
 	for _, o in f.options or ({} :: { string }) do
-		table.insert(opts, { value = o, label = i18n.option(L, scope, f.key, o) })
+		table.insert(opts, { value = o, label = strings.option(scope, f.key, o) })
 	end
 	return { k = "choice", value = v, options = opts, style = f.style }
 end
 
--- Bir alanın satırı (ya da satırları: profil renkleri her profil için bir satır).
+-- One field's row (or rows: profile colors get one row per profile).
 local function field_rows(L: { [string]: string }, m: schema.Mod, f: schema.Field, s: schema.Settings, d: Data): { any }
 	local id = `set.{m.id}.{f.key}`
 	local v = s[f.key]
@@ -142,7 +140,7 @@ local function look_page(L: { [string]: string }, d: Data): { any }
 			label = L["look." .. f.key],
 			hint = L[`look.{f.key}.hint`],
 			changed = v ~= def or nil,
-			defaultLabel = if f.kind == "color" then L["color." .. def] else i18n.option(L, "look", f.key, def),
+			defaultLabel = if f.kind == "color" then L["color." .. def] else strings.option("look", f.key, def),
 			control = control,
 		})
 	end
@@ -157,22 +155,6 @@ local function look_page(L: { [string]: string }, d: Data): { any }
 	end
 	table.insert(presets, { id = "alloff", label = L.all_off, hint = L.all_off_hint, control = { k = "action", label = L.all_off_btn, act = "alloff" } })
 	return {
-		{
-			id = "language",
-			title = L.sec_language,
-			rows = {
-				{
-					id = "lang",
-					label = L.lang,
-					control = {
-						k = "choice",
-						value = d.lang,
-						style = "segmented",
-						options = { { value = "tr", label = "Türkçe" }, { value = "en", label = "English" } },
-					},
-				},
-			},
-		},
 		{ id = "look", title = L.sec_look, rows = look_rows },
 		{ id = "presets", title = L.sec_presets, rows = presets },
 	}
@@ -219,9 +201,9 @@ local function count(t: { [string]: boolean }): number
 	return n
 end
 
---- `prefs` düğümünün özellikleri. `page`: "look" ya da "mods"; `editing`: açık menü.
+--- Properties of the `prefs` node. `page`: "look" or "mods"; `editing`: the open menu.
 function panel.props(d: Data, page: string, editing: any): { [string]: any }
-	local L = i18n.strings(d.lang)
+	local L = strings.text
 	local on_page = if page == "mods" then "mods" else "look"
 	local enabled = count(d.on)
 	return {
@@ -238,7 +220,7 @@ function panel.props(d: Data, page: string, editing: any): { [string]: any }
 end
 
 local function with(t: any, key: string, value: any): { [string]: any }
-	-- kv'den gelen tablolar korumalı olabilir (table.clone olmaz): elle kopyala.
+	-- Tables from kv may be protected (no table.clone): copy by hand.
 	local out: { [string]: any } = {}
 	if type(t) == "table" then
 		for k, v in t do
@@ -249,15 +231,9 @@ local function with(t: any, key: string, value: any): { [string]: any }
 	return out
 end
 
---- Bir satırın yeni değeri (`value`, nil: varsayılana dön) için kv yazımları;
---- geçersiz değer ya da bilinmeyen satır boş liste.
+--- The kv writes for a row's new value (`value`, nil: back to the default);
+--- an empty list for an invalid value or an unknown row.
 function panel.change(d: Data, item: string, value: any): { Write }
-	if item == "lang" then
-		if value == "tr" or value == "en" then
-			return { { key = i18n.KV_KEY, value = value } }
-		end
-		return {}
-	end
 	local look_key = string.match(item, "^look%.(.+)$")
 	if look_key then
 		if value == nil then
@@ -289,7 +265,7 @@ function panel.change(d: Data, item: string, value: any): { Write }
 	local current = registry.settings(m, cfg)
 	local key, profile = string.match(rest, "^(%w+)%.(.+)$")
 	if key and profile then
-		-- Profil rengi: "auto" ya da nil rengi siler (ada göre otomatik).
+		-- Profile color: "auto" or nil removes the color (automatic by name).
 		local f = schema.field(m.fields, key)
 		if f == nil or f.kind ~= "colors" or not schema.is_profile_name(profile) then
 			return {}
@@ -323,7 +299,7 @@ function panel.change(d: Data, item: string, value: any): { Write }
 	return { { key = registry.KEY_CFG, value = with(cfg, m.id, with(current, rest, v)) } }
 end
 
---- Hazır set: açık modlar listedekilerle değişir (kullanıcı modları kapanır).
+--- Preset: the enabled mods are replaced by the listed ones (user mods turn off).
 function panel.preset(name: string): { Write }?
 	local ids = appearance.PRESETS[name]
 	if ids == nil then
