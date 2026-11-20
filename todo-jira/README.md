@@ -8,6 +8,8 @@ separate lines in that order (override the path with `TERN_JIRA_CREDENTIAL_FILE`
 never put in the plugin settings, the command line or a preview. `TERN_TODO_PATH` selects a
 different local Markdown board.
 
+![The Jira pane with sample cards: the card list, and the selected card's memory note, description and comments](docs/screenshot.webp)
+
 - **Jira pane (cards and comments)**: shows the cards assigned to this account and every comment on
   each card (author, date, Markdown text; your own comments are marked "you", newest first) in a
   separate pane. It is read-only and refreshes every five minutes and on `r`; `d` shows finished

@@ -1,7 +1,7 @@
-# luau-lsp için `tern plugin types .` çıktısı; Tern sürümüne göre yeniden üretilir
+# `tern plugin types .` output for luau-lsp; regenerated for each Tern version
 tern.d.luau
 
-# Editör / işletim sistemi
+# Editors / operating systems
 .vscode/
 .idea/
 .DS_Store

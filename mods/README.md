@@ -4,6 +4,8 @@ Small switchable tweaks that restyle Tern, the way Claude Code mods personalize 
 panel with an **Appearance** page and a **Mods** page, ten built-in mods and a folder for your own CSS.
 Every mod starts off; turn on what you like.
 
+![The Mods panel's Mods page: each built-in mod with its switch and settings](docs/screenshot.webp)
+
 ## Install
 
 ```sh

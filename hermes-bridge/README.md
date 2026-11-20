@@ -1,6 +1,11 @@
 # hermes-bridge
 
-Bridge between Carly, Hermes and omp (window half only, `window.luau`).
+Connects Carly (Tern's assistant), Hermes and omp: Carly gets Hermes, kanban and field-device tools, and
+`tern-bridge` (a small CLI) lets Hermes, omp or a shell queue jobs that this plugin runs in the Tern window:
+ask Carly, start an omp agent tab, open a device's live Hermes tab, show a toast, or open a Markdown file as
+a reading tab. Window half only (`window.luau`).
+
+![A reading tab opened by tern-bridge: a Markdown daily summary in a new blue tab of the current session](docs/screenshot.webp)
 
 ## What it gives Carly (`plugins['hermes-bridge']`)
 

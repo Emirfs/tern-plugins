@@ -4,12 +4,9 @@ Shows the remaining usage limits of every account across all of your
 [omp](https://github.com/can1357/oh-my-pi) profiles (`default` and `~/.omp/profiles/*`) in one Tern
 pane. An account signed in to several profiles is counted once.
 
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/screenshot-light.png">
-  <img alt="omp-usage pane with sample data: Claude with two accounts, Codex and Antigravity, each window with its remaining percentage, a bar and the time until it resets" src="docs/screenshot-dark.png">
-</picture>
+![omp-usage pane with sample accounts: two Claude accounts with a combined total, Codex and Antigravity, each window with its remaining percentage, a bar and the time until it resets](docs/screenshot.webp)
 
-The screenshot is the plugin's own view code rendered with sample accounts.
+The screenshot uses made-up accounts.
 
 ## Install
 

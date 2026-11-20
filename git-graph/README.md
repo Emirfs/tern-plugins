@@ -5,6 +5,8 @@ the commit list with colored lanes in the middle; below it the selected commit, 
 selected file's diff side by side. The idea comes from [mykeura/git-gui](https://github.com/mykeura/git-gui);
 `git` must be on the PATH.
 
+![Git graph pane on a sample repository: branches and tags on the left, colored lanes with merges, and the selected commit's details and diff below](docs/screenshot.webp)
+
 ## Opening it
 
 | Command | What it does |

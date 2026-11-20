@@ -4,6 +4,8 @@ Tern panel for the shared memory vault (`~/GitHub/araclar/hafiza`, overridable w
 Python 3; everything that writes to the vault goes through the vault's own `.tools/inbox.py`, the panel never
 writes to the vault directly.
 
+![The Memory vault pane with sample suggestions: the list, the selected suggestion with Accept and Reject, and today's note](docs/screenshot.webp)
+
 - The **Memory: suggestions and today** command opens the panel, or focuses it if it is already open.
 - **Suggestions**: what agents leave with `memory_write op=propose` (summary, decision, lesson, profile, rule
   idea, open task). The selected suggestion shows its text, reason and source. **Accept** (`a`) applies the
