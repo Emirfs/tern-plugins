@@ -202,16 +202,6 @@ local STR: { [string]: { [string]: string } } = {
 		["busy-animation.style.quiet"] = "Hiçbiri",
 		["busy-animation.color"] = "Renk",
 		["busy-animation.speed"] = "Bir tur",
-		-- parked
-		["parked.title"] = "Park edilenler",
-		["parked.desc"] = "Sekmelerden park edilen pane'lerin destesi. Destenin yeri ve boyu Tern'de (kartı sürükleyerek).",
-		["parked.look"] = "Kartlar",
-		["parked.look.cards"] = "Tern",
-		["parked.look.compact"] = "Sıkı",
-		["parked.look.preview"] = "Büyük önizleme",
-		["parked.fade"] = "Bekleyen opaklık",
-		["parked.fade.hint"] = "İmleç destede değilken kartların opaklığı.",
-		["parked.accent"] = "Vurgu şeridi",
 	},
 	en = {
 		title = "Mods",
@@ -391,15 +381,6 @@ local STR: { [string]: { [string]: string } } = {
 		["busy-animation.style.quiet"] = "None",
 		["busy-animation.color"] = "Color",
 		["busy-animation.speed"] = "Loop length",
-		["parked.title"] = "Parked chats",
-		["parked.desc"] = "The pile of panes parked out of tabs. Its place and size are Tern's (drag a card).",
-		["parked.look"] = "Cards",
-		["parked.look.cards"] = "Tern",
-		["parked.look.compact"] = "Compact",
-		["parked.look.preview"] = "Large preview",
-		["parked.fade"] = "Idle opacity",
-		["parked.fade.hint"] = "Opacity of the cards while the pointer is elsewhere.",
-		["parked.accent"] = "Accent stripe",
 	},
 }
 

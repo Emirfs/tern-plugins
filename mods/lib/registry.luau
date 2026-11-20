@@ -20,7 +20,6 @@ registry.BUILTIN = {
 	require("./mods/composer"),
 	require("./mods/ask_style"),
 	require("./mods/busy_animation"),
-	require("./mods/parked"),
 } :: { schema.Mod }
 
 registry.KEY_ON = "on"

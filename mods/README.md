@@ -1,7 +1,7 @@
 # mods
 
 Small switchable tweaks that restyle Tern, the way Claude Code mods personalize Claude Code: a settings
-panel with an **Appearance** page and a **Mods** page, eleven built-in mods and a folder for your own CSS.
+panel with an **Appearance** page and a **Mods** page, ten built-in mods and a folder for your own CSS.
 Every mod starts off; turn on what you like.
 
 ## Install
@@ -47,7 +47,6 @@ Tern's):
 | Composer | The bottom line of agent chats: input box, model/account row, status row above it. | density, corners, border, background, text size, status row show / dim / hide |
 | Ask prompts | The agent's questions and approval requests: question box, permission dialog, waiting card. | border color, density, glow |
 | Busy animation | Panes and tabs whose agent works: edge shimmer, tab pulse, both, or none (Tern's own animations go quiet too). | style, color, loop length |
-| Parked chats | The pile of panes parked out of tabs. Its place and size stay Tern's (`park_pile`, drag a card). | cards Tern / compact / large preview, idle opacity, accent stripe |
 
 Limits, stated honestly:
 
@@ -99,7 +98,7 @@ Layout: `lib/mods/*.luau` (one module per mod: defaults, fields, `css(settings, 
 ## Fragility
 
 The mods target Tern's internal classes and omp's surface roles (`#tabbar`, `.tt`, `.tn-pane`, `.tn-head`,
-`--tn-bar`, `--tn-tile-gap`, `.pk-pile`, `[data-role='omp.editor']`, …). They were checked against
+`--tn-bar`, `--tn-tile-gap`, `.pk-card`, `[data-role='omp.editor']`, …). They were checked against
 Tern 0.9.26; a Tern update that renames them breaks the mod that uses them until it is updated.
 
 ## Tests

@@ -142,10 +142,6 @@ do
 end
 
 do
-	check.truthy(has(css("parked", { look = "compact" }), ".pk-face, .pk-bb"), "compact hides the previews")
-end
-
-do
 	check.eq(appearance.css(appearance.normalize(nil)), nil, "theme defaults add nothing")
 	local out = appearance.css(appearance.normalize({ accent = "green", corners = "square" })) :: string
 	check.truthy(has(out, "--accent: #3ecf8e"), "accent override")
