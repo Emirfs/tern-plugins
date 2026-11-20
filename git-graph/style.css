@@ -1,4 +1,4 @@
-/* Git grafiği. Two parts:
+/* Git graph. Two parts:
    1. The graph column. Tern keeps only its own span tokens as classes, so host.luau spells each lane piece
       with known tokens (see the table above `lane_spans`). Here, scoped to this block's graph column, those
       tokens lose their usual look and draw the piece instead: lines, corners and the node, in the lane color,

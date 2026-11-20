@@ -60,12 +60,12 @@ end
 
 -- Name-status lines, renames keep both paths
 do
-	local files = parse.files("M\tsrc/a.c\nR087\told/b.c\tnew/b.c\nA\tdocs/ç.md\n")
+	local files = parse.files("M\tsrc/a.c\nR087\told/b.c\tnew/b.c\nA\tdocs/é.md\n")
 	check.eq(#files, 3, "three files")
 	check.eq(files[2].status, "R", "rename status letter")
 	check.eq(files[2].old, "old/b.c", "rename keeps the old path")
 	check.eq(files[2].path, "new/b.c", "rename path is the new one")
-	check.eq(files[3].path, "docs/ç.md", "non-ASCII path unquoted")
+	check.eq(files[3].path, "docs/é.md", "non-ASCII path unquoted")
 	local args = parse.diff_args("abc", files[2])
 	check.eq(args[#args], "old/b.c", "a rename's diff names both paths")
 end
@@ -89,9 +89,9 @@ end
 
 -- Ages and paths
 do
-	check.eq(parse.age(1000, 1030), "şimdi", "seconds")
-	check.eq(parse.age(0, 7200), "2 sa", "hours")
-	check.eq(parse.age(0, 86400 * 400), "1 yıl", "years")
+	check.eq(parse.age(1000, 1030), "now", "seconds")
+	check.eq(parse.age(0, 7200), "2h", "hours")
+	check.eq(parse.age(0, 86400 * 400), "1y", "years")
 	check.eq(parse.base("C:\\Users\\x\\GitHub\\repo\\"), "repo", "base of a Windows path")
 	check.eq(parse.norm("C:\\A\\b\\"), parse.norm("c:/a/B"), "norm ignores slashes, case and a trailing separator")
 end

@@ -313,21 +313,21 @@ function Parse.jira_keys(text: string, projects: { string }): { string }
 	return out
 end
 
---- Short Turkish age: `şimdi`, `5 dk`, `3 sa`, `2 gün`, `4 ay`, `1 yıl`.
+--- Short age: `now`, `5m`, `3h`, `2d`, `4mo`, `1y`.
 function Parse.age(t: number, now: number): string
 	local d = math.max(0, now - t)
 	if d < 60 then
-		return "şimdi"
+		return "now"
 	elseif d < 3600 then
-		return `{d // 60} dk`
+		return `{d // 60}m`
 	elseif d < 86400 then
-		return `{d // 3600} sa`
+		return `{d // 3600}h`
 	elseif d < 86400 * 30 then
-		return `{d // 86400} gün`
+		return `{d // 86400}d`
 	elseif d < 86400 * 365 then
-		return `{d // (86400 * 30)} ay`
+		return `{d // (86400 * 30)}mo`
 	end
-	return `{d // (86400 * 365)} yıl`
+	return `{d // (86400 * 365)}y`
 end
 
 --- Folder name of a path, for titles.

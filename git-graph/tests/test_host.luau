@@ -166,7 +166,7 @@ local ok, err = pcall(function()
 	check.truthy(has(main, "FRMWR-397: second line"), "subject shown")
 	check.truthy(has(main, "◉"), "head glyph drawn")
 	check.truthy(has(main, "side"), "branch chip on the first commit")
-	check.truthy(has(main, "Dallar (2)"), "sidebar lists both local branches")
+	check.truthy(has(main, "Branches (2)"), "sidebar lists both local branches")
 	local dock = text(view.dock)
 	check.truthy(has(dock, "a.txt"), "detail lists the changed file")
 	check.truthy(has(dock, "+two"), "the first file's diff shows beside the files without asking")
@@ -184,16 +184,16 @@ local ok, err = pcall(function()
 	block.event(state, { ev = "action", act = "ref", value = state.commits[1].hash }, cx)
 	flush()
 
-	-- Narrow pane: author, hash and toolbar hidden by default; Görünüm toggles a part and survives a save
+	-- Narrow pane: author, hash and toolbar hidden by default; View toggles a part and survives a save
 	cx.cols = 60
 	local narrow = text(block.view(state, cx).main)
 	check.eq(has(narrow, "Test"), false, "author column hidden when narrow")
-	check.eq(has(narrow, "Depolar"), false, "toolbar hidden when narrow")
-	check.truthy(has(narrow, "Dallar ("), "branches still listed when narrow")
+	check.eq(has(narrow, "Repos"), false, "toolbar hidden when narrow")
+	check.truthy(has(narrow, "Branches ("), "branches still listed when narrow")
 	check.truthy(has(narrow, "gg-compact"), "narrow pane draws the branch list as a strip")
 	check.truthy(has(narrow, "FRMWR-397: second line"), "subjects still shown")
 	block.key(state, { name = "v", text = "v", ctrl = false, alt = false, meta = false, shift = false }, cx)
-	check.truthy(has(text(block.view(state, cx).dock), "Dar pane"), "v opens Görünüm in the dock")
+	check.truthy(has(text(block.view(state, cx).dock), "Narrow pane"), "v opens View in the dock")
 	block.event(state, { ev = "action", id = "parts", act = "layout", value = "narrow:author", item = "author" }, cx)
 	check.truthy(has(text(block.view(state, cx).main), "Test"), "author turned on for narrow panes")
 	block.event(state, { ev = "action", act = "threshold", value = "here" }, cx)
@@ -202,13 +202,13 @@ local ok, err = pcall(function()
 	block.event(state, { ev = "action", act = "layout-default" }, cx)
 	check.eq(kv["layout-default"].narrow.author, true, "made the default for new panes")
 	block.key(state, { name = "escape", ctrl = false, alt = false, meta = false, shift = false }, cx)
-	check.eq(state.settings, false, "escape closes Görünüm")
+	check.eq(state.settings, false, "escape closes View")
 	cx.cols = 120
 
 	-- Menu: copy, Jira link and a switch to `side` that waits for the window's confirm
 	local first = state.commits[1]
 	local second = state.commits[2]
-	block.event(state, { ev = "action", id = "commits", act = "Hash'i kopyala", item = first.hash }, cx)
+	block.event(state, { ev = "action", id = "commits", act = "Copy hash", item = first.hash }, cx)
 	check.eq(copied[1], first.hash, "copy puts the full hash on the clipboard")
 	local menu: { string } = nil :: any
 	local function find_rows(n: any)
@@ -229,9 +229,9 @@ local ok, err = pcall(function()
 		end
 	end
 	find_rows(view.main)
-	check.truthy(menu and table.find(menu, "Dala geç: side") ~= nil, "switch offered for a branch on the commit")
+	check.truthy(menu and table.find(menu, "Switch to branch: side") ~= nil, "switch offered for a branch on the commit")
 
-	block.event(state, { ev = "action", id = "commits", act = "Dala geç: side", item = second.hash }, cx)
+	block.event(state, { ev = "action", id = "commits", act = "Switch to branch: side", item = second.hash }, cx)
 	flush()
 	local ask = kv.ask
 	check.truthy(ask and ask.kind == "pick" and ask.pane == 7, "the switch asks the window to confirm")
@@ -245,10 +245,10 @@ local ok, err = pcall(function()
 	-- A dirty tree refuses the switch before asking
 	fs.writeFile(repo .. "/a.txt", "dirty\n")
 	kv.ask = nil
-	block.event(state, { ev = "action", id = "commits", act = "Dala geç: main", item = first.hash }, cx)
+	block.event(state, { ev = "action", id = "commits", act = "Switch to branch: main", item = first.hash }, cx)
 	flush()
 	check.eq(kv.ask, nil, "no confirm with uncommitted changes")
-	check.truthy(has(toasts[#toasts], "Dala geçilmedi"), "the refusal is toasted")
+	check.truthy(has(toasts[#toasts], "Did not switch branch"), "the refusal is toasted")
 
 	-- Following focus: a folder outside any repo keeps the repo and says why
 	block.event(state, { ev = "action", act = "pin" }, cx)
@@ -257,7 +257,7 @@ local ok, err = pcall(function()
 	run_timers()
 	flush()
 	check.eq(state.repo ~= nil and string.find(state.repo, "repo", 1, true) ~= nil, true, "repo kept outside a repo")
-	check.truthy(state.note and has(state.note, "Git deposu değil"), "note explains")
+	check.truthy(state.note and has(state.note, "Not a Git repository"), "note explains")
 
 	-- AI: the configured argv gets the commit on stdin, the answer is cached in kv
 	fs.writeDir(tmp .. "/data")
