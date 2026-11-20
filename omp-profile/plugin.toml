@@ -1,7 +1,7 @@
 schema = 1
 id = "omp-profile"
-name = "omp profil"
+name = "omp profile"
 version = "0.1.0"
-description = "Odaktaki pane'de çalışan omp oturumunun profilini durum satırında ve sekme başlığında gösterir."
+description = "Shows the profile of the omp session running in the focused pane in the status line and the tab title."
 icon = "sparkle"
 window = "window.luau"

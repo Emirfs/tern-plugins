@@ -1,7 +1,7 @@
 --!strict
--- `omp usage --json` raporlarını hesaplara çevirir ve profiller arasında
--- toplar. Saf: Tern'e dokunmaz, metin üretmez (sorunlar kod olarak döner),
--- böylece test edilebilir. Kurallar omp'nin kendi `capacity` hesabını izler.
+-- Turns `omp usage --json` reports into accounts and aggregates them across
+-- profiles. Pure: does not touch Tern and produces no text (issues come back as
+-- codes), so it is testable. The rules follow omp's own `capacity` computation.
 
 local fmt = require("./fmt")
 
@@ -19,13 +19,13 @@ export type Limit = {
 	status: string?,
 }
 
--- Bir hesabın bir penceredeki bağlayıcı (en çok kullanılmış) limiti.
+-- The binding (most used) limit of one account in one window.
 export type Cell = { used: number, resets: number?, status: string? }
 
 export type Account = {
 	provider: string,
 	key: string,
-	-- E-posta, hesap ya da proje kimliği; hiçbiri yoksa nil (görünüm "bilinmeyen hesap" yazar).
+	-- E-mail, account or project id; nil if there is none (the view writes "unknown account").
 	label: string?,
 	org: string?,
 	profiles: { string },
@@ -35,7 +35,7 @@ export type Account = {
 	windows: { [string]: Cell },
 }
 
--- Tablonun bir pencere sütunu: süre (5 saat, 7 gün) ve varsa ayrı kota havuzu.
+-- One window column of the table: the duration (5 hours, 7 days) and, if any, a separate quota pool.
 export type Column = { key: string, label: string, duration: number?, meter: string? }
 
 export type Provider = { id: string, accounts: { Account } }
@@ -44,11 +44,11 @@ export type IssueKind = "no_report" | "disabled"
 
 export type Issue = { provider: string, who: string, kind: IssueKind, detail: string?, profiles: { string } }
 
--- Profil adı → son başarılı `omp usage --json` çıktısı (yoksa nil).
+-- Profile name → last successful `omp usage --json` output (nil if none).
 export type Runs = { [string]: { data: any? } }
 
---- omp'nin `resolveUsedFraction` karşılığı: kullanılan oran, 0–1. Hiçbir alan
---- yoksa nil: bilinmeyen kullanım asla 0 sayılmaz.
+--- Counterpart of omp's `resolveUsedFraction`: the used fraction, 0–1. nil if no
+--- field is present: unknown usage is never counted as 0.
 function usage.used_fraction(amount: any): number?
 	if type(amount) ~= "table" then
 		return nil
@@ -67,7 +67,7 @@ function usage.used_fraction(amount: any): number?
 	return math.clamp(f, 0, 1)
 end
 
---- omp'nin `meterForLimit` karşılığı: aynı pencerede ayrı kota havuzu tutan limitler.
+--- Counterpart of omp's `meterForLimit`: limits that keep a separate quota pool in the same window.
 function usage.meter_of(provider: string, limit: any): string?
 	if provider ~= "anthropic" and provider ~= "openai-codex" then
 		return nil
@@ -96,7 +96,7 @@ local function limit_label(limit: any): string
 	return label
 end
 
---- Hesabın profiller arası kimliği: sağlayıcı + e-posta (+ org), yoksa hesap kimliği.
+--- An account's identity across profiles: provider + e-mail (+ org), else the account id.
 function usage.identity(provider: string, md: any): string?
 	if type(md) ~= "table" then
 		return nil
@@ -135,7 +135,7 @@ local function account_of(provider: string, report: any, profile: string, index:
 	for _, limit in (if type(report.limits) == "table" then report.limits else {}) do
 		local scope = if type(limit.scope) == "table" then limit.scope else {}
 		local window = if type(limit.window) == "table" then limit.window else {}
-		-- Antigravity aynı paylaşılan kotayı (Claude & GPT) iki kez raporlar.
+		-- Antigravity reports the same shared quota (Claude & GPT) twice.
 		local lkey = if type(scope.sharedGroup) == "string" then "g:" .. scope.sharedGroup else "i:" .. tostring(limit.id)
 		if not seen[lkey] then
 			seen[lkey] = true
@@ -171,16 +171,16 @@ local function account_of(provider: string, report: any, profile: string, index:
 	}
 end
 
--- Pencere anahtarı süreye göre; Codex'in varsayılan "chat" havuzu dışındaki
--- ayrı havuzlar (model kapsamlı tier, Spark) kendi sütununu alır.
+-- The window key goes by duration; separate pools other than Codex's default "chat"
+-- pool (model-scoped tier, Spark) get their own column.
 local function window_key(l: Limit): string
 	local wkey = if l.duration then "d:" .. l.duration else "l:" .. l.label
 	local meter = if l.meter == "chat" then nil else l.meter
 	return if meter then wkey .. "|m:" .. meter else wkey
 end
 
---- omp'nin `computeProviderWindowStats` mantığı: pencere başına hesabın en çok
---- kullanılan limiti o pencerede hesabı bağlar. Kullanımı bilinmeyen limit atlanır.
+--- The logic of omp's `computeProviderWindowStats`: per window, the account's most
+--- used limit binds the account in that window. A limit with unknown usage is skipped.
 function usage.windows_of(acc: Account): { [string]: Cell }
 	local out: { [string]: Cell } = {}
 	for _, l in acc.limits do
@@ -196,7 +196,7 @@ function usage.windows_of(acc: Account): { [string]: Cell }
 	return out
 end
 
---- Bütün hesapların pencere sütunları, kısadan uzuna; adlar `L` dilinde.
+--- The window columns of all accounts, short to long; names come from the `L` text table.
 function usage.columns_of(providers: { Provider }, L: { [string]: string }): { Column }
 	local seen: { [string]: boolean } = {}
 	local list: { Column } = {}
@@ -228,8 +228,8 @@ function usage.columns_of(providers: { Provider }, L: { [string]: string }): { C
 	return list
 end
 
---- `order` sırasındaki profillerin raporlarını hesaplara toplar. Aynı hesap
---- (bkz. `identity`) bir kez sayılır; en taze raporu kazanır.
+--- Aggregates the reports of the profiles in `order` into accounts. The same account
+--- (see `identity`) is counted once; its freshest report wins.
 function usage.aggregate(order: { string }, runs: Runs): ({ Provider }, { Issue })
 	local by_key: { [string]: Account } = {}
 	local by_provider: { [string]: { Account } } = {}
@@ -334,8 +334,8 @@ end
 
 local WHO = { "provider", "email", "accountId", "orgName" }
 
---- `omp usage --json` çıktısının yalnız bu eklentinin okuduğu alanları: önbellek
---- (`tern.kv`) küçük kalsın ve gereksiz kimlik bilgisi diske yazılmasın diye.
+--- Only the fields of the `omp usage --json` output that this plugin reads: so the cache
+--- (`tern.kv`) stays small and no needless credentials are written to disk.
 function usage.trim(data: any): any
 	if type(data) ~= "table" or type(data.reports) ~= "table" then
 		return nil

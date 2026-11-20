@@ -9,7 +9,7 @@ describe("sanitizeId", () => {
 		expect(sanitizeId("pricing-page")).toBe("pricing-page");
 		expect(sanitizeId("  My Chart: v2!! ")).toBe("my-chart-v2");
 		expect(sanitizeId("../../etc/passwd")).toBe("etc-passwd");
-		expect(sanitizeId("ğüş")).toBe("");
+		expect(sanitizeId("éàñ")).toBe("");
 		expect(sanitizeId("a".repeat(100))).toHaveLength(64);
 	});
 });

@@ -1,7 +1,7 @@
 --!strict
--- host.luau'yu Tern olmadan çalıştırmak için çalışma zamanı taklidi: düğümler
--- düz tablo, süreçler tutulur ve test bitirir, kv bellekte, dosya sistemi
--- verilen yol kümesi. Windows gibi davranır (ev dizini `C:\home`).
+-- A runtime stand-in to run host.luau without Tern: nodes are plain tables,
+-- processes are kept and the test finishes them, kv is in memory, the file system is
+-- the given set of paths. Behaves like Windows (home directory `C:\home`).
 
 local fs = require("@lune/fs")
 local luau = require("@lune/luau")
@@ -15,13 +15,13 @@ export type Harness = {
 	blocks: { [string]: any },
 	kv: { [string]: any },
 	procs: { Proc },
-	-- `tern.fs.exists`'e sorulan yollar.
+	-- Paths asked of `tern.fs.exists`.
 	probed: { string },
-	-- Bu adlarla başlatma hata fırlatır (PATH'te yok gibi).
+	-- Starting these names throws (as if not on PATH).
 	missing: { [string]: boolean },
 	renders: number,
 	cx: any,
-	-- Bekleyen süreci bitirir: stdout JSON'a çevrilen değer ya da hata.
+	-- Finishes a pending process: the value encoded as stdout JSON, or an error.
 	finish: (proc: Proc, result: { data: any?, status: number?, stderr: string?, timed_out: boolean? }) -> (),
 }
 
@@ -46,7 +46,7 @@ local function nodes(): any
 	return ui
 end
 
---- Görünümdeki bütün metin, satır satır.
+--- All text in the view, line by line.
 function stub.text(node: any): string
 	local out: { string } = {}
 	local function walk(n: any)
@@ -67,7 +67,7 @@ function stub.text(node: any): string
 	return table.concat(out, "\n")
 end
 
---- `root` altındaki host.luau'yu taklitle yükler; `profiles` ~/.omp/profiles altındakiler.
+--- Loads the host.luau under `root` with the stub; `profiles` are those under ~/.omp/profiles.
 function stub.host(root: string, profiles: { string }, existing: { string }?): Harness
 	local h: Harness = {
 		blocks = {},
@@ -103,7 +103,7 @@ function stub.host(root: string, profiles: { string }, existing: { string }?): H
 				return h.kv[key]
 			end,
 			set = function(key: string, value: any)
-				-- Tern gibi JSON'a çevirip geri okur: saklanan kopya, canlı tablo değil.
+				-- Round-trips through JSON like Tern: the stored copy, not the live table.
 				h.kv[key] = if value == nil then nil else serde.decode("json", serde.encode("json", value))
 			end,
 		},
@@ -166,7 +166,7 @@ function stub.host(root: string, profiles: { string }, existing: { string }?): H
 		})
 	end
 
-	-- `require("./x")` isteyen dosyanın klasörüne göre çözülür.
+	-- `require("./x")` resolves relative to the requiring file's folder.
 	local cache: { [string]: any } = {}
 	local function load(path: string): any
 		if cache[path] ~= nil then

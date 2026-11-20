@@ -1,12 +1,12 @@
 --!strict
--- omp profil: odaktaki pane'de çalışan omp oturumunun profilini durum
--- satırında ve sekme başlığında gösterir.
+-- omp profile: shows the profile of the omp session running in the focused
+-- pane in the status line and the tab title.
 --
--- omp, Tern'e oturum dosyasını bildirir (OSC 1337 `omp_session_file`);
--- `tern inspect --json` bunu pane başına verir. Profil dosyanın yolundan
--- okunur: `~/.omp/profiles/<ad>/…` → <ad>, `~/.omp/agent/…` → default.
+-- omp reports its session file to Tern (OSC 1337 `omp_session_file`);
+-- `tern inspect --json` returns it per pane. The profile is read from the file's path:
+-- `~/.omp/profiles/<name>/…` → <name>, `~/.omp/agent/…` → default.
 
--- Pane id → profil adı; omp çalışmayan pane'ler yok.
+-- Pane id → profile name; panes not running omp are absent.
 local profiles: { [number]: string } = {}
 
 local inflight = false
@@ -14,11 +14,11 @@ local queued = false
 local debounce: TimerHandle? = nil
 local last_title_refresh = -math.huge
 
--- Odak ve pane olayları kısa bir beklemeyle, başlık olayları (omp çalışırken
--- başlığı sürekli günceller) en fazla bu sıklıkta yenileme tetikler.
+-- Focus and pane events trigger a refresh after a short delay; title events (omp
+-- updates the title constantly while running) at most this often.
 local DEBOUNCE_MS = 250
 local TITLE_MIN_MS = 5000
--- Olay kaçarsa diye arka plan yenilemesi.
+-- A background refresh in case an event is missed.
 local POLL_MS = 30000
 
 local TONES = { "accent", "info", "success", "warning", "pending", "user" }
@@ -38,7 +38,7 @@ local function profile_of(file: any): string?
 	return nil
 end
 
--- Profil adından sabit bir renk: aynı profil her yerde aynı renkte.
+-- A stable colour from the profile name: the same profile gets the same colour everywhere.
 local function tone_of(name: string): string
 	if name == "default" then
 		return "muted"
@@ -134,7 +134,7 @@ local function poll()
 	end)
 end
 
--- Eklenti açık bir pencereye sonradan yüklenince window_start gelmez: yüklenirken de başla.
+-- When the plugin is loaded into an already open window, window_start never fires: start on load too.
 refresh()
 poll()
 tern.on("window_start", function(_cx)
@@ -173,7 +173,7 @@ tern.chrome.tab_title(function(tab)
 	end
 	local base = if tab.name and tab.name ~= "" then tab.name else tab.title
 	local tag = "[" .. name .. "] "
-	-- omp eklentisi (omp-extension/profile-title.ts) başlığa zaten yazdıysa tekrarlama.
+	-- If the omp extension (omp-extension/profile-title.ts) already wrote it into the title, do not repeat it.
 	if string.sub(base, 1, #tag) == tag then
 		return nil
 	end

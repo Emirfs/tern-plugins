@@ -9,8 +9,7 @@ pane. An account signed in to several profiles is counted once.
   <img alt="omp-usage pane with sample data: Claude with two accounts, Codex and Antigravity, each window with its remaining percentage, a bar and the time until it resets" src="docs/screenshot-dark.png">
 </picture>
 
-The screenshot is the plugin's own view code rendered with sample accounts, in Turkish. The pane speaks
-Turkish or English (see Language below).
+The screenshot is the plugin's own view code rendered with sample accounts.
 
 ## Install
 
@@ -22,21 +21,11 @@ Requires Tern 0.9.5 or later, and the `omp` CLI on the machine that runs your pa
 
 ## Usage
 
-- Command palette (`Ctrl+Shift+P`): **Open omp usage (all accounts)** (Turkish: **omp kullanımını aç**)
-  opens the pane beside the focused one, or focuses it if this window already has one. **New omp kullanım
-  block** opens the same pane.
+- Command palette (`Ctrl+Shift+P`): **Open omp usage (all accounts)** opens the pane beside the focused
+  one, or focuses it if this window already has one. **New omp usage block** opens the same pane.
 - Key bind: `Ctrl+Alt+Shift+U`.
 - `r` refreshes; `R` clears omp's usage cache (`omp usage invalidate`) and then refreshes. Data refreshes on
   its own every 2 minutes; reset countdowns update every 30 seconds.
-- `l` switches the language between Turkish and English.
-
-## Language
-
-The choice is saved (`lang` in the plugin's `tern.kv`), shared by every pane and window. Until you pick one,
-a `tr*` locale in `LC_ALL`, `LC_MESSAGES` or `LANG` gives Turkish and anything else English; Windows sets
-none of these, so it starts in English. The palette command **omp usage: switch language (TR/EN)** does the
-same as `l`; panes that are already open pick it up on their next redraw (within 30 seconds). Palette titles
-follow the language when the plugin loads.
 
 ## What it shows
 
@@ -70,7 +59,7 @@ new pane draws at once instead of waiting for omp.
 
 Layout: `host.luau` (the block: state, omp runs, cache, view), `lib/usage.luau` (reports into accounts,
 deduplication, the cache's trimmed copy), `lib/layout.luau` (what fits a pane size), `lib/fmt.luau`,
-`lib/i18n.luau` (both languages' text), `window.luau` (palette commands).
+`lib/text.luau` (the pane's text), `window.luau` (palette command).
 
 ## Tests
 
@@ -82,4 +71,4 @@ lune run omp-usage/tests/run.luau
 ```
 
 They cover the `lib/` modules and run `host.luau` end to end under a stub of Tern's runtime: cache before
-the first fetch, a failing profile keeping its data, the Windows omp lookup, the language key.
+the first fetch, a failing profile keeping its data, the Windows omp lookup, the key handling.
