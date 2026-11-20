@@ -1,7 +1,7 @@
 --!strict
--- Sekmelerin görünümü. Tern etkin sekmeyi `.tt.on` ile, bazı düzenlerde altına
--- kayan bir `.tb-pill` ile çizer; o kayan dolgu her biçimde gizlenir ki biçim
--- sekmenin kendisinde dursun.
+-- The look of tabs. Tern draws the active tab with `.tt.on` and, in some layouts, a
+-- sliding `.tb-pill` under it; that sliding fill is hidden in every style so the
+-- style stays on the tab itself.
 
 local schema = require("../schema")
 

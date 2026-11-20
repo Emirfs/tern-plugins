@@ -1,7 +1,7 @@
 --!strict
--- İnce sekme çubuğu. Tern çubuğun yüksekliğini `--tn-bar` değişkeninden alır
--- (her düzen kendi değerini `html.lay-*` üzerinde verir); paneller de ona göre
--- yukarı kayar. Yalnız yatay sekmeler: dikey sekmelerde (`tabs-v`) çubuk yoktur.
+-- A thin tab bar. Tern takes the bar's height from the `--tn-bar` variable
+-- (each layout sets its own value on `html.lay-*`); the panes move up with it.
+-- Horizontal tabs only: vertical tabs (`tabs-v`) have no bar.
 
 local schema = require("../schema")
 
@@ -28,7 +28,7 @@ local mod: schema.Mod = {
 			`html.tabs-h #tabbar .tb-pill \{ height: {num(tab)}px !important; }`,
 		}
 		if not s.blocks then
-			-- Yeni blok kısayolları (Terminal, Browser, Note…): ince çubukta yer kaplamasın.
+			-- New block shortcuts (Terminal, Browser, Note…): keep them from taking room in the thin bar.
 			table.insert(css, "html.tabs-h #tabbar .tb-blocks { display: none !important; }")
 		end
 		return table.concat(css, "\n")

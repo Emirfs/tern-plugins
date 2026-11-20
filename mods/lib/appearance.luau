@@ -1,8 +1,8 @@
 --!strict
--- Görünüm sekmesi: Tern'in kendi ayarlarında olmayan genel ayarlar. Yazı tipi,
--- boyut, tema, saydamlık, malzeme, yoğunluk, düzen Tern'de var; burada yalnız
--- temadan bağımsız vurgu rengi ve arayüz köşeleri. Hazır setler birkaç modu
--- birlikte açar.
+-- Appearance tab: global settings Tern's own settings don't have. Font, size,
+-- theme, opacity, material, density and layout exist in Tern; here we only add
+-- a theme-independent accent color and the UI corners. Presets turn on several
+-- mods together.
 
 local schema = require("./schema")
 
@@ -15,7 +15,7 @@ appearance.fields = {
 
 appearance.defaults = { accent = "theme", corners = "theme" } :: schema.Settings
 
--- `theme` palet adı değil; doğrulama onu da kabul etsin diye renk alanı seçenek gibi denetlenir.
+-- `theme` is not a palette name; the color field is checked like a choice so validation accepts it too.
 function appearance.normalize(raw: any): schema.Settings
 	local src = if type(raw) == "table" then raw else {}
 	local out: schema.Settings = schema.normalize(appearance.fields, appearance.defaults, src)
@@ -39,12 +39,12 @@ local CORNERS: { [string]: { chip: number, ctl: number, card: number, panel: num
 	round = { chip = 10, ctl = 14, card = 18, panel = 22, tab = 999 },
 }
 
---- Görünüm ayarlarının CSS'i; hepsi temadaysa nil.
+--- CSS for the appearance settings; nil when everything is left to the theme.
 function appearance.css(s: schema.Settings): string?
 	local css = {}
 	local c = if s.accent ~= "theme" then schema.color(s.accent) else nil
 	if c then
-		-- Tema vurgusunu `html` üzerinde (satır içi stil de olsa) ezer; açık/koyu karşılıkları ondan türer.
+		-- Overrides the theme accent on `html` (even over inline styles); the light/dark variants derive from it.
 		table.insert(
 			css,
 			`html \{ --accent: {c} !important; --accent-fill: color-mix(in oklab, {c}, black 12%) !important; --accent-ink: light-dark(color-mix(in oklab, {c}, black 30%), color-mix(in oklab, {c}, white 45%)) !important; accent-color: {c}; }`
@@ -64,7 +64,7 @@ function appearance.css(s: schema.Settings): string?
 	return table.concat(css, "\n")
 end
 
--- Hazır setler: uygulanınca açık modlar bu listeyle değişir.
+-- Presets: applying one replaces the enabled mods with this list.
 appearance.PRESETS = {
 	minimal = { "compact-tabs", "tab-style", "pane-shape" },
 	cozy = { "tab-style", "pane-shape", "composer", "busy-animation" },

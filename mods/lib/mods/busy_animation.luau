@@ -1,9 +1,9 @@
 --!strict
--- Ajanı çalışan pane ve sekmelere çalışma animasyonu. Tern çalışan sekmeye
--- `.tt.working` verir (adı kendi ışıltısıyla akar) ve komut çalıştıran terminal
--- pane'ine `.tn-pane.working` (kenarında `.tn-glow` halkası döner). Çalışan omp
--- pane'i bu sınıfı almaz; onu başlığındaki "Running" noktası (`.sdot.live`) ele
--- verir, o yüzden yalnız başlığı görünen pane'lerde yakalanır.
+-- A busy animation for panes and tabs whose agent is working. Tern gives a working
+-- tab `.tt.working` (its name flows with Tern's own shimmer) and a terminal running a
+-- command `.tn-pane.working` (a `.tn-glow` ring turns along its edge). A working omp
+-- pane doesn't get this class; the "Running" dot in its header (`.sdot.live`) gives it
+-- away, so it is caught only in panes whose header shows.
 
 local schema = require("../schema")
 
@@ -25,7 +25,7 @@ local mod: schema.Mod = {
 		local t = num(s.speed)
 		local style = s.style
 		if style == "quiet" then
-			-- Tern'in kendi çalışma animasyonları da susar.
+			-- Tern's own busy animations go quiet too.
 			return table.concat({
 				".tn-pane.working .tn-glow { display: none !important; }",
 				".tt.working .nm, .tn-vt .nav-row.working .lbl { animation: none !important; color: inherit !important; background: none !important; -webkit-background-clip: border-box !important; background-clip: border-box !important; }",
@@ -33,7 +33,7 @@ local mod: schema.Mod = {
 		end
 		local css = {}
 		if style == "shimmer" or style == "both" then
-			-- Tern'in kenar halkası (perimeter-gradient), tek parlak bir şeritle ve seçilen hızda.
+			-- Tern's edge ring (perimeter-gradient), with a single bright strip at the chosen speed.
 			table.insert(
 				css,
 				`{PANE} .tn-glow \{ opacity: 1 !important; visibility: visible !important; --tn-glow-stops: rgb(from {c} r g b / 8%) 0%, rgb(from {c} r g b / 8%) 55%, {c} 82%, rgb(from {c} r g b / 8%) 100% !important; }`

@@ -1,13 +1,12 @@
 --!strict
 local check = require("./check")
-local i18n = require("../lib/i18n")
+local strings = require("../lib/strings")
 local panel = require("../lib/panel")
 local registry = require("../lib/registry")
 local sprite = require("../lib/sprite")
 
 local function data(over: { [string]: any }?): panel.Data
 	local d: panel.Data = {
-		lang = "en",
 		on = {},
 		cfg = nil,
 		look = { accent = "theme", corners = "theme" },
@@ -26,7 +25,7 @@ local function only(ws: { panel.Write }): panel.Write
 	return ws[1]
 end
 
--- Satır değişiklikleri kv yazımlarına.
+-- Row changes become kv writes.
 do
 	local w = only(panel.change(data(), "on.wallpaper", true))
 	check.eq(w.key, "on", "switch writes the on table")
@@ -53,8 +52,6 @@ do
 	check.eq(#panel.change(data(), "set.profile-accent.colors.mine", "url(x)"), 0, "bad color ignored")
 	check.eq(#panel.change(data(), "set.profile-accent.colors.a b", "red"), 0, "bad profile name ignored")
 
-	check.eq(only(panel.change(data(), "lang", "tr")).value, "tr", "language")
-	check.eq(#panel.change(data(), "lang", "de"), 0, "unknown language ignored")
 	check.eq(only(panel.change(data(), "look.corners", "round")).value.corners, "round", "appearance")
 	check.eq(#panel.change(data(), "look.accent", "url(x)"), 0, "bad appearance value ignored")
 
@@ -63,7 +60,7 @@ do
 	check.eq(panel.preset("nope"), nil, "unknown preset")
 end
 
--- Sayfanın satırları: her satır kimliği change'in tanıdığı bir biçimde.
+-- The page's rows: every row id has a form that `change` recognizes.
 do
 	local props = panel.props(data({ on = { composer = true } }), "mods", nil)
 	check.eq(props.page, "mods", "mods page")
@@ -78,11 +75,11 @@ do
 	end
 	check.truthy(seen > 40, "every mod and field has a row")
 	local look = panel.props(data(), "look", nil)
-	check.eq(look.sections[1].rows[1].id, "lang", "language row first")
+	check.eq(look.sections[1].id, "look", "appearance section first")
 	check.eq(panel.props(data(), "bogus", nil).page, "look", "unknown page shows appearance")
 end
 
--- Kullanıcı modları.
+-- User mods.
 do
 	check.eq(registry.user_id("My Theme.CSS"), "user-my-theme", "slug")
 	check.eq(registry.user_id("notes.txt"), nil, "not CSS")
@@ -100,7 +97,7 @@ do
 	check.eq(registry.enabled("junk").wallpaper, nil, "junk is empty")
 end
 
--- Sprite sheet planı.
+-- Sprite sheet plan.
 do
 	local p = sprite.plan(1920, 1080, 4, 25, 100) :: sprite.Plan
 	check.eq(p.frames, 48, "frames capped")
@@ -115,28 +112,17 @@ do
 	check.eq(sprite.rate("0/0"), nil, "zero denominator")
 end
 
--- Diller: aynı anahtarlar, her modun ve alanının etiketi.
+-- Texts: every mod and field has a label.
 do
-	local tr, en = i18n._STR.tr, i18n._STR.en
-	for k in tr do
-		check.truthy(en[k] ~= nil, "en has " .. k)
-	end
-	for k in en do
-		check.truthy(tr[k] ~= nil, "tr has " .. k)
-	end
+	local L = strings.text
 	for _, m in registry.BUILTIN do
-		for _, L in { tr, en } do
-			check.truthy(L[m.id .. ".title"] and L[m.id .. ".desc"], m.id .. " title and description")
-			for _, f in m.fields do
-				if f.kind ~= "colors" then
-					check.truthy(L[`{m.id}.{f.key}`] ~= nil, `{m.id}.{f.key} label`)
-				end
+		check.truthy(L[m.id .. ".title"] and L[m.id .. ".desc"], m.id .. " title and description")
+		for _, f in m.fields do
+			if f.kind ~= "colors" then
+				check.truthy(L[`{m.id}.{f.key}`] ~= nil, `{m.id}.{f.key} label`)
 			end
 		end
 	end
-	check.eq(i18n.detect(nil, "tr_TR.UTF-8"), "tr", "Turkish locale")
-	check.eq(i18n.detect(nil, nil), "en", "no locale is English")
-	check.eq(i18n.detect("tr", "en_US"), "tr", "saved choice wins")
 end
 
 return nil

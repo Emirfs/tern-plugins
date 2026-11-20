@@ -1,11 +1,11 @@
 --!strict
--- Pencerenin arkasında duvar kağıdı: hareketli degrade ya da bir görsel.
--- Resim `body`'ye konur, `main#panel` saydamlaşır (tern-backdrop'un yöntemi;
--- github.com/avcton/tern-backdrop, MIT). Görselin baytlarını pencere yarısı
--- okuyup `data:` URL'si yapar (env.wallpaper_url): bir stil sayfasının `url()`'si
--- eklenti klasörü dışını gösteremez. Tern CSS arka planında hareketli GIF/WebP'nin
--- yalnız ilk karesini çizer; onları host yarısı ffmpeg ile tek bir kare dizisine
--- (sprite sheet) çevirir, kareler burada @keyframes ile oynar (env.wallpaper_anim).
+-- A wallpaper behind the window: an animated gradient or an image.
+-- The picture goes on `body` and `main#panel` turns transparent (tern-backdrop's method;
+-- github.com/avcton/tern-backdrop, MIT). The window half reads the image's bytes
+-- and makes a `data:` URL (env.wallpaper_url): a stylesheet's `url()`
+-- can't point outside the plugin folder. Tern draws only the first frame of an animated
+-- GIF/WebP in a CSS background; the host half converts those with ffmpeg into one frame
+-- sheet (sprite sheet) and the frames play here with @keyframes (env.wallpaper_anim).
 
 local schema = require("../schema")
 
@@ -21,7 +21,7 @@ local PRESETS: { [string]: { string } } = {
 }
 local PRESET_ORDER = { "aurora", "sunset", "ocean", "forest", "candy", "mono" }
 
--- Karartma, temaya uyan bir örtüyle: koyu temada koyu, açıkta açık.
+-- Dimming with a veil that matches the theme: dark on a dark theme, light on a light one.
 local SCRIM = "html { --mods-scrim: light-dark(#f4f4f6, #101014); }"
 
 local function scrim(dim: number): string
@@ -29,8 +29,8 @@ local function scrim(dim: number): string
 	return `linear-gradient(rgb(from var(--mods-scrim) r g b / {a}), rgb(from var(--mods-scrim) r g b / {a}))`
 end
 
--- Sprite sheet'in kareleri: her kare pencereyi "cover" gibi kaplar, karenin
--- ortası pencerenin ortasına gelir; kare değişimi step-end ile.
+-- The sprite sheet's frames: each frame covers the window like "cover", and the frame's
+-- middle lands on the window's middle; frames switch with step-end.
 local function anim_css(a: schema.Anim, dim: number): string
 	local w = `max(100vw, {num(a.ratio)} * 100vh)`
 	local h = `max(100vh, 100vw / {num(a.ratio)})`
@@ -118,7 +118,7 @@ local mod: schema.Mod = {
 			}, "\n")
 		end
 		if bg == nil then
-			-- Görsel seçilmedi ya da okunamadı: Tern'in kendi arka planı kalır.
+			-- No image chosen or it couldn't be read: Tern's own background stays.
 			return nil
 		end
 		local css = { SCRIM, "main#panel { background: transparent !important; }", bg }
@@ -131,7 +131,7 @@ local mod: schema.Mod = {
 			table.insert(css, ".tn-stage .tn-pane > :is(.tn-body, .tn-head) { background-color: rgb(from var(--panel) r g b / 50%) !important; }")
 		end
 		if s.bars then
-			-- Sekme ve widget çubuğu, arkadaki resim karışık olsa da okunsun diye hafif bir örtü.
+			-- A light veil over the tab and widget bars so they stay readable even over a busy image.
 			table.insert(
 				css,
 				"html #tabbar { background-image: linear-gradient(rgb(from var(--mods-scrim) r g b / 62%) 55%, rgb(from var(--mods-scrim) r g b / 0)) !important; }"

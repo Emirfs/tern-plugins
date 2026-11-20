@@ -1,8 +1,8 @@
 --!strict
--- Pane'ler arası boşluk ve köşe yuvarlaklığı. Tern ikisini düzenin
--- değişkenlerinden alır: Tiles `--tn-tile-gap`/`--tn-tile-r`, Rail/Float ve
--- "islands" yoğunluğu `--tn-island-gap`/`--tn-island-r`. Boşluk her pane'in
--- iç dolgusu olduğundan iki pane arası onun iki katıdır; burada yarısı yazılır.
+-- The gap between panes and their corner radius. Tern takes both from the layout's
+-- variables: Tiles `--tn-tile-gap`/`--tn-tile-r`, Rail/Float and the
+-- "islands" density `--tn-island-gap`/`--tn-island-r`. The gap is each pane's
+-- inner padding, so the space between two panes is twice it; half is written here.
 
 local schema = require("../schema")
 
@@ -21,7 +21,7 @@ local mod: schema.Mod = {
 		local r: number = s.radius
 		local css = {
 			`html \{ --tn-tile-gap: calc({num(half)}px * var(--tn-zoom, 1)) !important; --tn-island-gap: calc({num(half)}px * var(--tn-zoom, 1)) !important; --tn-tile-r: calc({num(r)}px * var(--tn-zoom, 1)) !important; --tn-island-r: calc({num(r)}px * var(--tn-zoom, 1)) !important; }`,
-			-- Başlıklı pane'in başlığı yarıçapı sabit 11px ile çizer.
+			-- A pane with a header draws the header with a fixed 11px radius.
 			`html .tn-stage .tn-pane.headed > .tn-head \{ border-radius: {num(r)}px {num(r)}px 0 0 !important; }`,
 			`html .tn-stage .tn-pane.headed > .tn-body \{ border-radius: 0 0 {num(r)}px {num(r)}px !important; }`,
 			`html .tn-stage .tn-pane:not(.headed) > .tn-body \{ border-radius: {num(r)}px !important; }`,

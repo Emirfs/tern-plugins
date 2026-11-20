@@ -1,9 +1,9 @@
 --!strict
--- Odak modu: sekme çubuğu ve durum satırı (widget çubuğu) gizlenir, paneller
--- pencerenin üst kenarına kadar uzanır: Tern her düzende paneli `--tn-bar`
--- kadar aşağıdan başlatır. "Göz at" açıkken üstte ince bir şerit kalır; imleç
--- ona gelince sekme çubuğu (ve pencere düğmeleri) panellerin üstünde açılır.
--- Yalnız yatay sekmeler; dikey sekme rayı (`tabs-v`) olduğu gibi kalır.
+-- Focus mode: the tab bar and the status line (widget bar) are hidden and the panes
+-- stretch to the window's top edge: in every layout Tern starts the panes `--tn-bar`
+-- lower. With "Peek" on, a thin strip stays at the top; when the pointer reaches it,
+-- the tab bar (and the window buttons) open over the panes.
+-- Horizontal tabs only; the vertical tab rail (`tabs-v`) stays as it is.
 
 local schema = require("../schema")
 
@@ -27,7 +27,7 @@ local mod: schema.Mod = {
 				css,
 				"html.tabs-h #tabbar:hover, html.tabs-h #tabbar:focus-within { height: 40px !important; opacity: 1; transition: opacity 0.15s ease, height 0s; }"
 			)
-			-- Pencere düğmeleri (çerçevesiz pencere): çubukla birlikte belirir.
+			-- Window buttons (frameless window): they appear together with the bar.
 			table.insert(css, "html.csd.tabs-h .csd-ctl { top: 6px !important; opacity: 0; transition: opacity 0.15s ease 0.3s; }")
 			table.insert(css, "html.csd.tabs-h:has(#tabbar:hover) .csd-ctl, html.csd.tabs-h .csd-ctl:hover { opacity: 1; transition-delay: 0s; }")
 		else
@@ -37,7 +37,7 @@ local mod: schema.Mod = {
 		end
 		if s.status then
 			table.insert(css, "html #widgetbar { display: none !important; }")
-			-- Widget çubuğu açıkken Tern sahnenin altında ona yer bırakır; o yer de kalksın.
+			-- With the widget bar open Tern leaves room for it under the stage; that room goes away too.
 			table.insert(css, "html.tn-widgets .tn-stage { bottom: 0 !important; }")
 		end
 		if s.heads then

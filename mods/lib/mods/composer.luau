@@ -1,8 +1,8 @@
 --!strict
--- omp sohbetlerinin alt satırı: yazma kutusu (`omp.editor` sütunu, Tern bunu
--- `.sf-dock` içinde çizer), altındaki model/hesap satırı (`omp.composer.bar`)
--- ve üstündeki durum satırı (`omp.hud`, "çalışıyor…" satırı `omp.hud.status`).
--- Soru (ask) kutusu da bir `omp.editor.*` sütunudur; ona `ask-style` bakar.
+-- The bottom line of omp chats: the input box (the `omp.editor` column, which Tern
+-- draws inside `.sf-dock`), the model/account row under it (`omp.composer.bar`)
+-- and the status row above it (`omp.hud`; the "working…" line is `omp.hud.status`).
+-- The ask box is an `omp.editor.*` column too; `ask-style` handles it.
 
 local schema = require("../schema")
 
