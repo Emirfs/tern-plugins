@@ -90,7 +90,7 @@ local function antigravity(): any
 	}
 end
 
---- `default` profili: eski (fetchedAt 100) Claude raporu, Codex, Antigravity, sorunlar.
+--- The `default` profile: an older (fetchedAt 100) Claude report, Codex, Antigravity, problems.
 function fixture.default(): any
 	return {
 		generatedAt = 1,
