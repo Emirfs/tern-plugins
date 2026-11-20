@@ -2,7 +2,7 @@ schema = 1
 id = "todo-jira"
 name = "Todo · Jira"
 version = "0.2.0"
-description = "Tern'in mevcut TODO.md panosunda Jira kartları, kart yorumları paneli, Hermes görevleri ve özel hafıza önizlemeleri."
+description = "Jira cards in Tern's existing TODO.md board, a card comments pane, Hermes tasks and memory-vault draft previews."
 host = "host.luau"
 window = "window.luau"
 

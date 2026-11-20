@@ -17,7 +17,7 @@ SECTIONS = (
     ("Log", "- YYYY-MM-DD · [[project]] · what was done (source: commit / session id)"),
     ("Open", "What is left, one line each."),
     ("Decisions", "Link decision notes: [[decision-name]]"),
-    (DRAFT, "The reporter writes the next Jira comment here. Tern shows it under Todo · Jira: Doldur; "
+    (DRAFT, "The reporter writes the next Jira comment here. Tern shows it under Todo · Jira: Fill; "
             "once approved and posted it is cleared and appears under Sent to Jira."),
     (SENT, "Rebuilt from Jira by the plugin; edits here are overwritten."),
 )
@@ -72,7 +72,7 @@ def sent_list(comments):
         if c["mine"]:
             first = next((line.strip("# *").strip() for line in c["text"].splitlines() if line.strip()), "")
             lines.append(f"- {c['created'][:10]} · [{c['id']}]({c['url']}) · {first[:120]}")
-    return "\n\n" + ("\n".join(lines) if lines else "_Henüz yorum yok._") + "\n\n"
+    return "\n\n" + ("\n".join(lines) if lines else "_No comments yet._") + "\n\n"
 
 
 def render(issue, existing):
@@ -146,7 +146,7 @@ def commit(paths, message):
         add = run("add", "--", *rel)
         done = add if add.returncode else run("commit", "-q", "-m", message, "--", *rel)
     except (OSError, subprocess.TimeoutExpired) as exc:
-        return f"Hafıza kasası commit edilemedi: {type(exc).__name__}"
+        return f"Could not commit the memory vault: {type(exc).__name__}"
     if done.returncode:
-        return "Hafıza kasası commit edilemedi: " + " ".join((done.stderr or done.stdout).split())[-200:]
+        return "Could not commit the memory vault: " + " ".join((done.stderr or done.stdout).split())[-200:]
     return None

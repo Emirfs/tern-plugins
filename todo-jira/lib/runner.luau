@@ -1,5 +1,5 @@
 --!strict
--- backend.py'yi iki yarı da aynı biçimde çalıştırır: ayar dosyasından gelen ortam, aynı argv, aynı yanıt çözümü.
+-- Runs backend.py the same way for both halves: environment from the config file, same argv, same reply decoding.
 local Runner = {}
 
 Runner.TIMEOUT_MS = 60000
@@ -25,14 +25,14 @@ function Runner.argv(): { string }
 	return { tern.getenv("TERN_TODO_PYTHON") or "python", "-B", "backend.py" }
 end
 
--- Sürecin sonucu → (veri, hata). Hata metni kullanıcıya gösterilir.
+-- Process result → (data, error). The error text is shown to the user.
 function Runner.decode(result: ProcessResult): (any, string?)
 	if result.status ~= 0 then
-		return nil, "Yerel Todo işlemi tamamlanamadı. Yazma işlemi ise tekrar etmeden önce hedefi kontrol edin."
+		return nil, "The local Todo operation did not complete. If it was a write, check the target before repeating it."
 	end
 	local ok, reply = pcall(tern.json.decode, result.stdout)
 	if not ok or type(reply) ~= "table" then
-		return nil, "Yerel Todo işlemi JSON yanıtı vermedi."
+		return nil, "The local Todo operation did not return a JSON reply."
 	end
 	return reply.data, reply.error
 end

@@ -33,7 +33,7 @@ class NoRedirect(HTTPRedirectHandler):
 
 def required(pattern, value):
     if not isinstance(value, str) or not pattern.fullmatch(value):
-        raise UserError("Kart, pano veya profil kimliği geçersiz.")
+        raise UserError("Invalid card, board or profile id.")
     return value
 
 
@@ -114,7 +114,7 @@ def adf_markdown(node, indent=""):
         lines = ["| " + " | ".join(rows[0]) + " |", "|" + " --- |" * width]
         return "\n".join(lines + ["| " + " | ".join(row) + " |" for row in rows[1:]])
     if kind in ("mediaSingle", "mediaGroup", "media"):
-        return "*[ek]*"
+        return "*[attachment]*"
     return adf_inline(content) if content else ""
 
 
@@ -139,16 +139,16 @@ class Jira:
         url = urlsplit(raw)
         if (url.scheme != "https" or not url.hostname or not url.hostname.endswith(".atlassian.net")
                 or url.netloc != url.hostname or url.path not in ("", "/") or url.query or url.fragment):
-            raise UserError("TERN_JIRA_URL, https://<site>.atlassian.net biçiminde olmalı.")
+            raise UserError("TERN_JIRA_URL must look like https://<site>.atlassian.net.")
         self.site = "https://" + url.hostname
         self.root = self.site + "/rest/api/3"
         account = Path(os.environ.get("TERN_JIRA_CREDENTIAL_FILE", str(Path.home() / ".jira_token.txt")))
         try:
             email, token = (line.strip() for line in account.read_text(encoding="utf-8-sig").splitlines() if line.strip())
         except (OSError, ValueError):
-            raise UserError("Jira kimlik dosyasında e-posta ve API anahtarı ayrı satırlarda olmalı.") from None
+            raise UserError("The Jira credential file must hold the e-mail and the API token on separate lines.") from None
         if not email or not token:
-            raise UserError("Jira kimlik dosyası eksik.")
+            raise UserError("The Jira credential file is incomplete.")
         self.auth = "Basic " + base64.b64encode(f"{email}:{token}".encode()).decode("ascii")
         self.opener = build_opener(NoRedirect())
 
@@ -167,10 +167,10 @@ class Jira:
                 detail = " ".join([*reply.get("errorMessages", []), *map(str, (reply.get("errors") or {}).values())])
             except (ValueError, OSError, AttributeError):
                 detail = ""
-            raise UserError(f"Jira HTTP {exc.code}; işlem onaylanmadı. {detail[:240]}".strip()) from None
+            raise UserError(f"Jira HTTP {exc.code}; the operation was not confirmed. {detail[:240]}".strip()) from None
         except (OSError, HTTPException):
-            # URLError, zaman aşımı ve yanıt okunurken kopan bağlantı: istek Jira'ya ulaşmış olabilir.
-            raise UserError("Jira yanıtı alınamadı. Tekrar göndermeden önce kartı yenileyin; yazma tamamlanmış olabilir.") from None
+            # URLError, timeout and a connection dropped while reading the reply: the request may have reached Jira.
+            raise UserError("No reply from Jira. Refresh the card before sending again; the write may have gone through.") from None
 
     def search(self, fields):
         issues = []
@@ -183,7 +183,7 @@ class Jira:
             if page.get("isLast") or not token:
                 return issues
             if token in tokens:
-                raise UserError("Jira arama sayfası tekrarladı; pano değiştirilmedi.")
+                raise UserError("The Jira search page repeated; the board was not changed.")
             tokens.add(token)
             search["nextPageToken"] = token
 
@@ -219,13 +219,13 @@ class Jira:
         """What an agent needs to start on a card: the card as Jira has it now, not the board's one-line title."""
         key = required(KEY, key)
         fields = self.api(f"/issue/{key}?fields=summary,status,description,comment")["fields"]
-        parts = [f"Jira kartı: {key} — {board_summary(fields['summary'])}", f"Durum: {fields['status']['name']}",
-                 f"Bağlantı: {self.site}/browse/{key}"]
+        parts = [f"Jira card: {key} — {board_summary(fields['summary'])}", f"Status: {fields['status']['name']}",
+                 f"Link: {self.site}/browse/{key}"]
         if fields.get("description"):
-            parts.append("Açıklama:\n" + adf_markdown(fields["description"])[:6000])
+            parts.append("Description:\n" + adf_markdown(fields["description"])[:6000])
         recent = self.comments(key, fields.get("comment") or {})[-3:]
         for c in recent:
-            parts.append(f"Yorum ({(c.get('author') or {}).get('displayName', '?')}, {c['created'][:10]}):\n"
+            parts.append(f"Comment ({(c.get('author') or {}).get('displayName', '?')}, {c['created'][:10]}):\n"
                          + adf_markdown(c.get("body") or {})[:3000])
         return "\n\n".join(parts)
 
@@ -235,7 +235,7 @@ class Jira:
         who = self.api("/myself")["accountId"]
         if ((data["fields"].get("assignee") or {}).get("accountId") != who
                 or item["id"] != data["id"] or key != data["key"]):
-            raise UserError(f"{key} artık bu Jira hesabına ait değil veya anahtarı değişmiş.")
+            raise UserError(f"{key} is no longer assigned to this Jira account or its key has changed.")
         return issue_view(data)
 
     def transitions(self, issue, lane):
@@ -247,13 +247,13 @@ class Jira:
         current = self.owned(data)
         field = data["field"]
         if field not in ("title", "due", "status") or current[field] != data["before"]:
-            raise UserError(f"{current['key']} Jira’da değişmiş. Önce 'Jira’dan yenile' yapın.")
+            raise UserError(f"{current['key']} changed in Jira. Run 'Refresh from Jira' first.")
         route = f"/issue/{current['key']}"
         value = data["value"]
         if field == "status":
             transition = next((t for t in self.transitions(current, data["lane"]) if t["id"] == value), None)
             if transition is None:
-                raise UserError("Bu durum geçişi artık kullanılamıyor.")
+                raise UserError("This status transition is no longer available.")
             self.api(route + "/transitions", method="POST", body={"transition": {"id": value}})
             value = transition["status"]
         else:
@@ -261,7 +261,7 @@ class Jira:
         updated = self.owned(data)
         expected = board_summary(value) if field == "title" else value
         if updated[field] != expected:
-            raise UserError("Jira değişikliği doğrulanamadı; tekrar göndermeden önce kartı yenileyin.")
+            raise UserError("The Jira change could not be verified; refresh the card before sending again.")
         return updated
 
     def comment(self, data):
@@ -276,7 +276,7 @@ class Jira:
         added = self.api(route, method="POST", body={"body": adf})["id"]
         verified = self.api(route + "/" + added)
         if adf_plain(verified.get("body") or {}) != sent:
-            raise UserError("Jira yorumu geri okundu ancak önizlemeyle eşleşmedi; kartı kontrol edin.")
+            raise UserError("The Jira comment was read back but did not match the preview; check the card.")
         return added
 
 
@@ -340,16 +340,16 @@ def hermes(args, *, text=None):
     local = Path(os.environ.get("LOCALAPPDATA", "")) / "hermes/bin/hermes.exe"
     exe = str(local) if local.is_file() else shutil.which("hermes")
     if not exe:
-        raise UserError("Hermes komutu bulunamadı.")
+        raise UserError("Hermes command not found.")
     try:
         result = subprocess.run([exe, "kanban", *args], input=text, capture_output=True,
                                 encoding="utf-8", errors="replace", timeout=25,
                                 env={**os.environ, "PYTHONIOENCODING": "utf-8", "NO_COLOR": "1"})
     except (OSError, subprocess.TimeoutExpired):
-        raise UserError("Hermes yanıtı alınamadı. Panoyu kontrol edin.") from None
+        raise UserError("No reply from Hermes. Check the board.") from None
     if result.returncode:
         detail = " ".join(result.stderr.split())[-240:]
-        raise UserError(f"Hermes Kanban çıkış kodu {result.returncode}; işlemi panoda kontrol edin. {detail}".strip())
+        raise UserError(f"Hermes Kanban exited with code {result.returncode}; check the operation on the board. {detail}".strip())
     return json.loads(result.stdout)
 
 
@@ -390,7 +390,7 @@ def dispatch(data):
     if op == "transitions":
         issue = jira.owned(data)
         if issue["status"] != data["before"]:
-            raise UserError(f"{issue['key']} Jira’da değişmiş. Önce 'Jira’dan yenile' yapın.")
+            raise UserError(f"{issue['key']} changed in Jira. Run 'Refresh from Jira' first.")
         return jira.transitions(issue, data["lane"])
     if op == "change":
         return jira.change(data)
@@ -398,7 +398,7 @@ def dispatch(data):
         added = jira.comment(data)
         vault.clear_draft(data["key"], data["text"])
         return added
-    raise UserError("Bilinmeyen Todo işlemi.")
+    raise UserError("Unknown Todo operation.")
 
 
 if __name__ == "__main__":
@@ -407,4 +407,4 @@ if __name__ == "__main__":
     except UserError as exc:
         print(json.dumps({"error": str(exc)}))
     except (ValueError, TypeError, KeyError, OSError) as exc:
-        print(json.dumps({"error": f"Todo · Jira: veri okunamadı ({type(exc).__name__})."}))
+        print(json.dumps({"error": f"Todo · Jira: could not read the data ({type(exc).__name__})."}))
