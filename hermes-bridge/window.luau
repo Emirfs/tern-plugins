@@ -263,7 +263,7 @@ local function open_reading(cx: WindowCx, job: Job): { [string]: any }
 		end)
 	end
 	tern.kv.set(READ_SEEN_KEY, seen)
-	cx:toast("info", `Okuma: {title}`, if job.from then `tern-bridge · {job.from}` else "tern-bridge")
+	cx:toast("info", `Reading: {title}`, if job.from then `tern-bridge · {job.from}` else "tern-bridge")
 	return { key = key, opened = true, tab = t, pane = pane }
 end
 
@@ -579,7 +579,7 @@ define(
 
 tern.command({
 	id = "status",
-	title = "Hermes köprüsü: durum",
+	title = "Hermes bridge: status",
 	icon = "sparkle",
 	run = function(cx: WindowCx)
 		local pending, failed = 0, 0
@@ -599,7 +599,7 @@ tern.command({
 				end
 			end
 		end
-		cx:toast("info", context_line, `kuyruk: {pending} bekleyen, {failed} başarısız · {SPOOL}`)
+		cx:toast("info", context_line, `queue: {pending} pending, {failed} failed · {SPOOL}`)
 	end,
 })
 

@@ -31,18 +31,18 @@ class ReadTest(unittest.TestCase):
         return [json.loads(p.read_text(encoding="utf-8")) for p in sorted(self.spool.glob("*.json"))]
 
     def test_stdin_is_stored_under_reading(self) -> None:
-        r = self.run_cli("read", "--title", "🧠 Günlük özet 19.11", "--key", "daily-2026-11-19",
-                         "--from", "hafiza", "-", stdin="# Özet\nmerhaba\n".encode("utf-8"))
+        r = self.run_cli("read", "--title", "🧠 Café summary 19.11", "--key", "daily-2026-11-19",
+                         "--from", "hafiza", "-", stdin="# Résumé\nhello\n".encode("utf-8"))
         self.assertEqual(r.returncode, 0, r.stderr)
         (job,) = self.jobs()
         self.assertEqual(
             {k: job[k] for k in ("v", "kind", "title", "key", "from")},
-            {"v": 1, "kind": "read", "title": "🧠 Günlük özet 19.11", "key": "daily-2026-11-19", "from": "hafiza"},
+            {"v": 1, "kind": "read", "title": "🧠 Café summary 19.11", "key": "daily-2026-11-19", "from": "hafiza"},
         )
         path = Path(job["path"])
         self.assertEqual(path.parent, self.spool.parent / "reading")
-        self.assertRegex(path.name, r"^\d{8}-\d{6}-günlük-özet-19-11\.md$")
-        self.assertEqual(path.read_text(encoding="utf-8"), "# Özet\nmerhaba\n")
+        self.assertRegex(path.name, r"^\d{8}-\d{6}-café-summary-19-11\.md$")
+        self.assertEqual(path.read_text(encoding="utf-8"), "# Résumé\nhello\n")
 
     def test_path_is_resolved(self) -> None:
         md = self.root / "note.md"

@@ -81,19 +81,19 @@ do
 		platforms = { telegram = { state = "connected" }, whatsapp = { state = "disconnected" } },
 	}
 	local devices = {
-		{ id = "fa-61d44cb4", name = "LG klima kutusu", session_id = "s1" },
+		{ id = "fa-61d44cb4", name = "LG AC box", session_id = "s1" },
 		{ id = "fa-7ae9b284", name = "MHI VRF gateway" },
 	}
 	local line = bridge.status_line(gw, devices, nil)
 	check.truthy(string.find(line, "Hermes gateway running (telegram ok, whatsapp disconnected)", 1, true), "gateway part")
-	check.truthy(string.find(line, "ESP devices (2): LG klima kutusu [fa-61d44cb4]; MHI VRF gateway [fa-7ae9b284, no session]", 1, true), "devices part")
+	check.truthy(string.find(line, "ESP devices (2): LG AC box [fa-61d44cb4]; MHI VRF gateway [fa-7ae9b284, no session]", 1, true), "devices part")
 	check.truthy(#line <= 400, "within 400 bytes")
 	check.truthy(string.find(bridge.status_line(nil, nil, "no flag"), "no state file", 1, true), "missing state")
 	check.truthy(string.find(bridge.status_line(gw, nil, "boom"), "ESP devices unknown (boom)", 1, true), "device error")
 
 	local many = {}
 	for i = 1, 40 do
-		table.insert(many, { id = `fa-{i}`, name = `Çok uzun cihaz adı {i}` })
+		table.insert(many, { id = `fa-{i}`, name = `A very long device name {i}` })
 	end
 	local long = bridge.status_line(gw, many, nil)
 	check.truthy(#long <= 400, "long line clipped")
@@ -104,7 +104,7 @@ end
 -- clip on UTF-8 boundaries
 do
 	check.eq(bridge.clip("abc", 5), "abc", "short kept")
-	local s = "ğğğğ" -- 8 bytes
+	local s = "éééé" -- 8 bytes
 	local c = bridge.clip(s, 6)
 	check.truthy(utf8.len(c) ~= nil, "valid utf-8 after clip")
 	check.truthy(#c <= 6, "clip bound")
@@ -121,7 +121,7 @@ end
 -- device parsing and matching
 do
 	local list = bridge.parse_devices({
-		{ id = "fa-61d44cb4", name = "LG klima kutusu", thread_id = 1232, session_id = "s" },
+		{ id = "fa-61d44cb4", name = "LG AC box", thread_id = 1232, session_id = "s" },
 		{ id = "fa-7ae9b284", name = "MHI VRF gateway" },
 		{ name = "no id" },
 	}) :: { any }
@@ -129,9 +129,9 @@ do
 	check.eq(list[1].thread_id, 1232, "thread id kept")
 	check.eq(select(2, bridge.parse_devices("x")), "device list is not a JSON array", "not a list")
 
-	check.eq((bridge.match_device(list, "FA-61D44CB4") :: any).name, "LG klima kutusu", "by id, any case")
+	check.eq((bridge.match_device(list, "FA-61D44CB4") :: any).name, "LG AC box", "by id, any case")
 	check.eq((bridge.match_device(list, "mhi vrf gateway") :: any).id, "fa-7ae9b284", "by exact name")
-	check.eq((bridge.match_device(list, "klima") :: any).id, "fa-61d44cb4", "by name part")
+	check.eq((bridge.match_device(list, "AC") :: any).id, "fa-61d44cb4", "by name part")
 	check.eq(bridge.match_device(list, "a"), nil, "ambiguous part")
 	check.eq(bridge.match_device(nil, "x"), nil, "no list")
 end
@@ -139,15 +139,15 @@ end
 -- device tabs
 do
 	local tabs = {
-		{ id = 10, session = 1, pane = 100, name = "LG klima kutusu", title = "hermes" },
+		{ id = 10, session = 1, pane = 100, name = "LG AC box", title = "hermes" },
 		{ id = 11, session = 2, pane = 101, name = nil, title = "hermes tern --device fa-7ae9b284" },
-		{ id = 12, session = 2, pane = 102, name = "lg klima kutusu", title = "x" },
+		{ id = 12, session = 2, pane = 102, name = "lg ac box", title = "x" },
 	}
-	check.eq((bridge.find_tab(tabs, 2, "fa-61d44cb4", "LG klima kutusu") :: any).id, 12, "by name in session")
+	check.eq((bridge.find_tab(tabs, 2, "fa-61d44cb4", "LG AC box") :: any).id, 12, "by name in session")
 	check.eq((bridge.find_tab(tabs, 2, "fa-7ae9b284", "MHI VRF gateway") :: any).id, 11, "by id in title")
-	check.eq(bridge.find_tab(tabs, 3, "fa-61d44cb4", "LG klima kutusu"), nil, "other session")
+	check.eq(bridge.find_tab(tabs, 3, "fa-61d44cb4", "LG AC box"), nil, "other session")
 	check.eq(bridge.device_command("fa-61d44cb4"), "hermes tern --device fa-61d44cb4", "plain id")
-	check.eq(bridge.device_command('LG "klima"'), 'hermes tern --device "LG klima"', "quoted name")
+	check.eq(bridge.device_command('LG "AC"'), 'hermes tern --device "LG AC"', "quoted name")
 end
 
 -- export args: optional args left out do not shift cx and the call

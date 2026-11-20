@@ -1,13 +1,15 @@
-# Hafıza
+# Memory vault
 
-Ortak hafıza kasasının (`~/GitHub/araclar/hafiza`, `HAFIZA_DIR` ile değişir) Tern paneli. Python 3 gerekir;
-kasaya yazan her şey kasanın kendi `.tools/inbox.py` aracıdır, panel kasaya doğrudan yazmaz.
+Tern panel for the shared memory vault (`~/GitHub/araclar/hafiza`, overridable with `HAFIZA_DIR`). Requires
+Python 3; everything that writes to the vault goes through the vault's own `.tools/inbox.py`, the panel never
+writes to the vault directly.
 
-- **Hafıza: öneriler ve bugün** komutu paneli açar ya da açıksa odaklar.
-- **Öneriler**: ajanların `memory_write op=propose` ile bıraktıkları (özet, karar, ders, profil, kural fikri, açık iş).
-  Seçili öneride metin, neden ve kaynak görünür. **Kabul et** (`a`) öneriyi hedef notuna işler ve commit eder;
-  **Reddet** (`x`) öneriyi siler (git geçmişinde kalır). Sağ tık **Hedef notu aç** notu açar.
-- Kural fikirleri kural dosyalarına otomatik gitmez: kabul edilirse kasada `rules-accepted.md`'ye yazılır,
-  agent-rules'a elle taşınır.
-- **Bugün**: kasanın `daily/<bugün>.md` notu; toplayıcı her akşam 20:30'da doldurur.
-- Panel dakikada bir ve `r` ile yenilenir.
+- The **Memory: suggestions and today** command opens the panel, or focuses it if it is already open.
+- **Suggestions**: what agents leave with `memory_write op=propose` (summary, decision, lesson, profile, rule
+  idea, open task). The selected suggestion shows its text, reason and source. **Accept** (`a`) applies the
+  suggestion to its target note and commits; **Reject** (`x`) deletes the suggestion (it stays in git
+  history). Right-click **Open target note** opens the note.
+- Rule ideas do not go to the rule files automatically: if accepted they are written to `rules-accepted.md`
+  in the vault, and you move them to agent-rules by hand.
+- **Today**: the vault's `daily/<today>.md` note; the collector fills it every evening at 20:30.
+- The panel refreshes every minute and on `r`.

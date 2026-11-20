@@ -39,7 +39,7 @@ function stub.new(root: string): any
 
 	local tern: any = {
 		context = "window",
-		plugin = { id = "hermes-bridge", name = "Hermes köprüsü", dir = "C:\\plugin", data = "C:\\data" },
+		plugin = { id = "hermes-bridge", name = "Hermes bridge", dir = "C:\\plugin", data = "C:\\data" },
 		runtime = { os = "windows", jit = false },
 		getenv = function(name: string): string?
 			return h.env[name]

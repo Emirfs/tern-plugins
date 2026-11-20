@@ -1,11 +1,11 @@
 schema = 1
 id = "hafiza"
-name = "Hafıza"
+name = "Memory vault"
 version = "0.1.0"
-description = "Ortak hafıza kasasının (~/GitHub/araclar/hafiza) öneri kutusu ve günün notu: ajanların önerilerini kabul et ya da reddet."
+description = "Suggestion inbox and today's note of the shared memory vault (~/GitHub/araclar/hafiza): accept or reject the suggestions agents leave."
 host = "host.luau"
 window = "window.luau"
 
 [[blocks]]
 id = "panel"
-title = "Hafıza"
+title = "Memory vault"

@@ -1,16 +1,16 @@
 --!strict
--- Sekme ağacında satır satır bölünmüş ızgaraları bulur. Saf: yalnız düzen
--- ağacına (`TabTree`) bakar, test edilebilir.
+-- Finds grids split row by row in a tab's tree. Pure: it only looks at the
+-- layout tree (`TabTree`), so it is testable.
 
 local grid = {}
 
--- Çevrilecek en küçük ızgara: satır sayısı × satır başına pane.
+-- Smallest grid to convert: number of rows × panes per row.
 export type Min = { rows: number, cols: number }
 
 local DEFAULT_MIN: Min = { rows = 2, cols = 2 }
 grid.DEFAULT_MIN = DEFAULT_MIN
 
--- `dir` yönündeki iç içe bölmeleri sırasıyla düzleştirir: (A | (B | C)) → A, B, C.
+-- Flattens nested splits in direction `dir` in order: (A | (B | C)) → A, B, C.
 local function chain(t: TabTree, dir: string, out: { TabTree })
 	if t.pane == nil and t.split == dir and t[1] and t[2] then
 		chain(t[1], dir, out)
@@ -20,9 +20,9 @@ local function chain(t: TabTree, dir: string, out: { TabTree })
 	end
 end
 
---- Düğüm satırlara (`down`) bölünmüşse, en az `min.rows` satırı varsa ve her
---- satır aynı sayıda (en az `min.cols`) yan yana pane'den oluşuyorsa pane
---- id'lerini satır satır döndürür; değilse nil.
+--- If the node is split into rows (`down`), has at least `min.rows` rows, and
+--- every row consists of the same number of (at least `min.cols`) side-by-side
+--- panes, returns the pane ids row by row; otherwise nil.
 function grid.rows_grid(node: TabTree, min: Min): { { number } }?
 	if node.pane ~= nil or node.split ~= "down" then
 		return nil
@@ -54,7 +54,7 @@ function grid.rows_grid(node: TabTree, min: Min): { { number } }?
 	return out
 end
 
---- Ağaçtaki bütün satır ızgaraları; bir ızgaranın içine inilmez.
+--- Every row grid in the tree; it does not descend into a grid.
 function grid.find(node: TabTree, min: Min, out: { { { number } } }?): { { { number } } }
 	local found = out or {}
 	if node.pane ~= nil then
@@ -74,7 +74,7 @@ function grid.find(node: TabTree, min: Min, out: { { { number } } }?): { { { num
 	return found
 end
 
---- kv'deki `min` değerini doğrular; geçersizse varsayılan.
+--- Validates the `min` value from kv; falls back to the default if invalid.
 function grid.parse_min(value: any): Min
 	if type(value) == "table" and type(value.rows) == "number" and type(value.cols) == "number" then
 		return { rows = math.max(2, math.floor(value.rows)), cols = math.max(2, math.floor(value.cols)) }

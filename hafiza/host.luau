@@ -1,16 +1,16 @@
 --!strict
--- `panel` bloğu: kasanın öneri kutusu (inbox/) ve günün notu. Kabul et / Reddet kasadaki
--- `.tools/inbox.py`yi çalıştırır; o da notu değiştirip commit eder. Bu blok kasaya kendisi yazmaz.
--- Tuşlar: r yenile, a seçili öneriyi kabul et, x reddet.
+-- `panel` block: the vault's suggestion inbox (inbox/) and today's note. Accept / Reject run the
+-- vault's `.tools/inbox.py`, which edits the note and commits. This block never writes to the vault itself.
+-- Keys: r refresh, a accept the selected suggestion, x reject it.
 
 local ui = tern.ui
 
 local REFRESH_MS = 60 * 1000
-local ACT_ACCEPT = "Kabul et"
-local ACT_REJECT = "Reddet"
-local ACT_OPEN = "Hedef notu aç"
+local ACT_ACCEPT = "Accept"
+local ACT_REJECT = "Reject"
+local ACT_OPEN = "Open target note"
 local KIND_LABEL: { [string]: string } = {
-	summary = "özet", decision = "karar", lesson = "ders", profile = "profil", rule = "kural fikri", open = "açık iş",
+	summary = "summary", decision = "decision", lesson = "lesson", profile = "profile", rule = "rule idea", open = "open task",
 }
 
 type Proposal = { file: string, target: string, kind: string, source: string, why: string, text: string, when: string }
@@ -56,14 +56,14 @@ local function run(args: { string }, done: (any, string?) -> ())
 			function(result: ProcessResult, _)
 				local decoded, reply = pcall(tern.json.decode, result.stdout)
 				if result.status ~= 0 or not decoded or type(reply) ~= "table" then
-					done(nil, "Kasa aracı yanıt vermedi: " .. string.sub(result.stderr, -200))
+					done(nil, "Vault tool did not respond: " .. string.sub(result.stderr, -200))
 				else
 					done(reply.data, reply.error)
 				end
 			end)
 	end)
 	if not ok then
-		done(nil, `Python başlatılamadı: {err}`)
+		done(nil, `Could not start Python: {err}`)
 	end
 end
 
@@ -128,10 +128,10 @@ local function act(state: State, name: string, file: string?)
 	run({ verb, item.file }, function(result, err)
 		state.busy = false
 		if err then
-			state.cx:toast("error", "Hafıza: işlem yapılamadı", err)
+			state.cx:toast("error", "Memory: action failed", err)
 		else
-			local what = if verb == "accept" then `{item.target} notuna işlendi` else "öneri silindi"
-			state.cx:toast("success", "Hafıza: " .. what, if result and result.warning then result.warning else nil)
+			local what = if verb == "accept" then `applied to {item.target}` else "suggestion deleted"
+			state.cx:toast("success", "Memory: " .. what, if result and result.warning then result.warning else nil)
 		end
 		refresh(state)
 	end)
@@ -152,24 +152,24 @@ local function inbox_table(state: State): Node
 		})
 	end
 	return with(ui.table({
-		{ id = "when", head = "Ne zaman", priority = -1 },
-		{ id = "target", head = "Hedef", mono = true },
-		{ id = "kind", head = "Tür" },
-		{ id = "text", head = "Öneri", grow = 1 },
+		{ id = "when", head = "When", priority = -1 },
+		{ id = "target", head = "Target", mono = true },
+		{ id = "kind", head = "Kind" },
+		{ id = "text", head = "Suggestion", grow = 1 },
 	}, rows, {
 		selectable = true,
 		selected = state.selected,
-		empty = if state.loading then "Okunuyor…" else "Bekleyen öneri yok.",
+		empty = if state.loading then "Loading…" else "No pending suggestions.",
 	}), { key = "inbox" })
 end
 
 local function detail(item: Proposal): Node
 	local children: { Node } = {
 		ui.md(item.text),
-		ui.kv({ { "Neden", item.why }, { "Kaynak", ui.span(item.source, "mono") }, { "Dosya", ui.span(item.file, "mono") } }),
+		ui.kv({ { "Why", item.why }, { "Source", ui.span(item.source, "mono") }, { "File", ui.span(item.file, "mono") } }),
 	}
 	if item.kind == "rule" then
-		table.insert(children, ui.text({ ui.span("Kural fikri kural dosyalarına otomatik gitmez; kabul edilirse rules-accepted.md'ye yazılır, agent-rules'a sen taşırsın.", "muted") }))
+		table.insert(children, ui.text({ ui.span("Rule ideas do not go to the rule files automatically; if accepted they are written to rules-accepted.md and you move them to agent-rules yourself.", "muted") }))
 	end
 	local buttons = ui.row({
 		ui.button(ACT_ACCEPT, { variant = "primary", size = "sm", keys = { "a" }, actions = { click = "accept" } }),
@@ -193,14 +193,14 @@ tern.block.define("panel", {
 	end,
 
 	title = function(state: State): string?
-		return if #state.items > 0 then `Hafıza · {#state.items}` else "Hafıza"
+		return if #state.items > 0 then `Memory · {#state.items}` else "Memory"
 	end,
 
 	view = function(state: State, _cx: BlockCx): BlockView
 		local children: { Node } = {
 			with(ui.text({
-				ui.span(`{#state.items} öneri bekliyor`, "muted"),
-				ui.span("   r yenile · a kabul · x reddet · sağ tık: hedef notu aç", "dim"),
+				ui.span(`{#state.items} suggestions pending`, "muted"),
+				ui.span("   r refresh · a accept · x reject · right-click: open target note", "dim"),
 			}), { key = "status" }),
 		}
 		if state.err then
@@ -211,8 +211,8 @@ tern.block.define("panel", {
 		if item then
 			table.insert(children, detail(item))
 		end
-		local today = if state.today ~= "" then state.today else "_Bugün için henüz kayıt yok; toplayıcı her akşam 20:30'da yazar._"
-		table.insert(children, with(ui.section("Bugün", { ui.md(today) }), { key = "today" }))
+		local today = if state.today ~= "" then state.today else "_No entry for today yet; the collector writes it every evening at 20:30._"
+		table.insert(children, with(ui.section("Today", { ui.md(today) }), { key = "today" }))
 		return { main = ui.col(children) }
 	end,
 

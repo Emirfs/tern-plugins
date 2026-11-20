@@ -1,59 +1,59 @@
 # hermes-bridge
 
-Carly, Hermes ve omp arasında köprü (yalnız pencere yarısı, `window.luau`).
+Bridge between Carly, Hermes and omp (window half only, `window.luau`).
 
-## Carly'ye verdikleri (`plugins['hermes-bridge']`)
+## What it gives Carly (`plugins['hermes-bridge']`)
 
-| Export | Ne yapar |
+| Export | What it does |
 | --- | --- |
-| `hermes_ask(prompt, profile?)` | `hermes [-p profile] -z prompt`, son yanıt metni (≤ 2 dk) |
-| `hermes_kanban(title, body?, assignee?)` | `hermes kanban create --json --created-by carly …`; bildirimleri Hermes merkezden atar |
+| `hermes_ask(prompt, profile?)` | `hermes [-p profile] -z prompt`, returns the final answer text (≤ 2 min) |
+| `hermes_kanban(title, body?, assignee?)` | `hermes kanban create --json --created-by carly …`; Hermes sends the notifications from its own hub |
 | `esp_list()` | `hermes tern --list-devices` (C1) |
-| `esp_open(device)` | "ESP" oturumunda cihazın sekmesini açar ya da odaklar (`hermes tern --device <id>`, sekme adı = cihaz adı) |
+| `esp_open(device)` | Opens or focuses the device's tab in the "ESP" session (`hermes tern --device <id>`, tab name = device name) |
 | `omp_start(prompt, cwd?, command?)` | `cx.agents:start{how='tab'}` |
-| `agents_list()` | `cx.agents:list()` özeti |
+| `agents_list()` | Summary of `cx.agents:list()` |
 
-Bağlam satırı (`tern.carly.context`, ≤ 400 karakter): `gateway_state.json` platform durumları ve
-cihaz listesi. Sağlayıcı yalnız hazır metni döndürür (4 ms bütçesi); metni dakikada bir zamanlayıcı
-yeniler, cihaz listesini lider pencere 5 dakikada bir `hermes tern --list-devices` ile çeker
+Context line (`tern.carly.context`, ≤ 400 characters): platform states from `gateway_state.json` and the
+device list. The provider only returns ready-made text (4 ms budget); a timer refreshes the text every
+minute, and the leader window fetches the device list every 5 minutes with `hermes tern --list-devices`
 (`tern.kv` `devices`).
 
-## `tern-bridge` kuyruğu
+## The `tern-bridge` queue
 
-`tern-bridge` (Python stdlib) `%LOCALAPPDATA%\Tern\plugin-data\hermes-bridge\spool\<id>.json` yazar
-(önce `.tmp`, sonra yeniden adlandırma; `TERN_BRIDGE_SPOOL` değiştirir). Tek bir pencere (kv `leader`
-kalp atışı) 2 sn'de bir işleri alır: dosyayı siler, çalıştırır, sonucu `done/` ya da `failed/`
-(nedenle) altına yazar; her biri en çok 200 kayıt tutar.
+`tern-bridge` (Python stdlib) writes `%LOCALAPPDATA%\Tern\plugin-data\hermes-bridge\spool\<id>.json`
+(first `.tmp`, then a rename; `TERN_BRIDGE_SPOOL` overrides the location). A single window (kv `leader`
+heartbeat) picks up jobs every 2 s: it deletes the file, runs the job, and writes the outcome under `done/`
+or `failed/` (with the reason); each keeps at most 200 records.
 
 ```
 tern-bridge carly TEXT...                 # cx:ask_carly
 tern-bridge omp [--cwd DIR] [--command C] [--how tab|split|replace_if_alone] PROMPT...
 tern-bridge esp DEVICE                    # esp_open
 tern-bridge notify [--level info|success|error] [--title T] TEXT...   # toast
-tern-bridge read --title T --key KEY [--from NAME] (PATH | -)          # okuma sekmesi
-tern-bridge status [--json]               # bekleyen / başarısız / son işler
+tern-bridge read --title T --key KEY [--from NAME] (PATH | -)          # reading tab
+tern-bridge status [--json]               # pending / failed / recent jobs
 ```
 
-`-` metni stdin'den okur, `--from NAME` göndereni yazar, `--wait N` sonucu bekler (çıkış 0 tamam,
-1 başarısız, 2 hâlâ bekliyor: Tern ya da eklenti çalışmıyor).
+`-` reads the text from stdin, `--from NAME` records the sender, `--wait N` waits for the outcome (exit 0
+done, 1 failed, 2 still pending: Tern or the plugin is not running).
 
-`read`: Markdown dosyasını kullanıcının o an baktığı oturumda yeni, mavi bir sekmede açar (sekme adı `T`)
-ve kısa bir bilgi bildirimi gösterir; sekmeyi kapatmak = okundu. `-` stdin'i
-(≤ 200 KB) `plugin-data\hermes-bridge\reading\<YYYYMMDD-HHMMSS>-<slug>.md` altına yazar (spool'un
-kardeşi), iş o yolu taşır; PATH de ≤ 200 KB olmalı. Aynı `KEY` bir kez açılır (kv `read_seen`, son 500
-anahtar; tekrar `done/` altına `duplicate = true` ile düşer). `cx.docs:open`'ın odak seçeneği yok:
-açtıktan sonra kullanıcının odaklı bölmesi geri getirilir, sekme sekme çubuğunda bekler. Üreticiler: Hermes cron
-`hafiza_collect.py` (günlük not yazılıp oturunca `daily-<tarih>`), cihaz ajanları, hafıza önerileri,
-kanban.
+`read`: opens a Markdown file as a new blue tab in the session the user is currently looking at (tab name
+`T`) and shows a short info toast; closing the tab = read. `-` writes stdin (≤ 200 KB) to
+`plugin-data\hermes-bridge\reading\<YYYYMMDD-HHMMSS>-<slug>.md` (a sibling of the spool), and the job carries
+that path; PATH must also be ≤ 200 KB. The same `KEY` is opened once (kv `read_seen`, last 500 keys; a
+repeat lands under `done/` with `duplicate = true`). `cx.docs:open` has no focus option: after opening, the
+user's focused pane is put back, and the tab waits in the tab bar. Producers: the Hermes cron
+`hafiza_collect.py` (`daily-<date>` once the daily note is written and settled), device agents, memory
+suggestions, kanban.
 
-Kurulum: `cli\install.cmd` → `%USERPROFILE%\.local\bin\tern-bridge.cmd` + `tern_bridge.py`
-(kullanıcı PATH'inde).
+Install: `cli\install.cmd` → `%USERPROFILE%\.local\bin\tern-bridge.cmd` + `tern_bridge.py`
+(on the user's PATH).
 
-Yetenekler: Hermes için `%LOCALAPPDATA%\hermes\skills\autonomous-ai-agents\tern-bridge\SKILL.md`, omp
-(bütün profiller, `agents:user` kaynağı) için `~\.agents\skills\tern-bridge\SKILL.md`. İkisi de cihaza
-yazan işleri ve kullanıcı adına mesaj göndermeyi açık onay olmadan yasaklar.
+Skills: for Hermes `%LOCALAPPDATA%\hermes\skills\autonomous-ai-agents\tern-bridge\SKILL.md`, for omp
+(all profiles, `agents:user` source) `~\.agents\skills\tern-bridge\SKILL.md`. Both forbid jobs that write to
+a device and sending messages on the user's behalf without explicit approval.
 
-## Test
+## Tests
 
 ```sh
 lune run hermes-bridge/tests/run.luau
@@ -61,4 +61,4 @@ python hermes-bridge/tests/test_cli.py
 luau-lsp analyze --platform=standard --definitions=@tern=tern.d.luau hermes-bridge/*.luau hermes-bridge/lib/*.luau
 ```
 
-`tests/window_stub.luau`, `window.luau`yı Tern olmadan çalıştırır (exportlar, kuyruk, lider, ESP sekmesi).
+`tests/window_stub.luau` runs `window.luau` without Tern (exports, queue, leader, ESP tab).
